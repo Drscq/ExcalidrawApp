@@ -104,9 +104,15 @@ actor iCloudDriveFileManager {
         // ~/Library/Mobile Documents/iCloud~com~chocoford~excalidraw/
         if let iCloudContainerURL = FileManager.default
             .url(forUbiquityContainerIdentifier: "iCloud.com.chocoford.excalidraw") {
-            return iCloudContainerURL
+            var url = iCloudContainerURL
                 .appendingPathComponent("Data", conformingTo: .directory)
-                .appendingPathComponent("FileStorage", conformingTo: .directory)
+
+            #if DEBUG
+            // Debug: Data/Debug/FileStorage/
+            url = url.appendingPathComponent("Debug", conformingTo: .directory)
+            #endif
+
+            return url.appendingPathComponent("FileStorage", conformingTo: .directory)
         } else {
             return localCacheURL
         }
