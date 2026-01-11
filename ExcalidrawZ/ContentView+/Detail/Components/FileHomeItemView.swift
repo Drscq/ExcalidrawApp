@@ -258,7 +258,6 @@ private struct FileHomeItemContentView: View {
     }
     
     var body: some View {
-        let _ = Self._printChanges()
         SwiftUI.Group {
             if #available(macOS 13.0, *) {
                 layout {

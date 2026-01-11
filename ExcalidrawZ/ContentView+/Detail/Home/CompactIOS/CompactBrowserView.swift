@@ -115,6 +115,13 @@ struct CompactBrowserContentView<HomeGroup: ExcalidrawGroup>: View {
                 level: fileState.currentActiveFile != nil ? .never : .visible
             )
         }
+        .onAppear {
+            if let group = group as? Group {
+                fileState.currentActiveGroup = .group(group)
+            } else if let folder = group as? LocalFolder {
+                fileState.currentActiveGroup = .localFolder(folder)
+            }
+        }
         .onDisappear {
             // remove visible monitoring
             Task {
