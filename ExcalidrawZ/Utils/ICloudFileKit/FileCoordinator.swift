@@ -158,6 +158,9 @@ public actor FileCoordinator {
     /// Write data to a file safely with coordinated access
     ///
     /// Works for both local and iCloud files.
+    /// Automatically detects if file exists and uses appropriate coordination options:
+    /// - .forReplacing if file exists (triggers "modified" event)
+    /// - No options if file doesn't exist (triggers "created" event)
     ///
     /// - Parameters:
     ///   - url: The file URL to write to
@@ -170,14 +173,18 @@ public actor FileCoordinator {
             var coordinationError: NSError?
             let coordinator = NSFileCoordinator()
 
+            // Check if file exists to use appropriate coordination option
+            let fileExists = FileManager.default.fileExists(atPath: url.path)
+            let options: NSFileCoordinator.WritingOptions = fileExists ? .forReplacing : []
+
             coordinator.coordinate(
                 writingItemAt: url,
-                options: .forReplacing,
+                options: options,
                 error: &coordinationError
             ) { coordinatedURL in
                 do {
                     try data.write(to: coordinatedURL, options: .atomic)
-                    logger.info("Successfully wrote file: \(url.lastPathComponent)")
+                    logger.info("Successfully wrote file: \(url.lastPathComponent) (fileExists: \(fileExists))")
                     continuation.resume()
                 } catch {
                     logger.error("Failed to write file: \(url.lastPathComponent) - \(error)")
