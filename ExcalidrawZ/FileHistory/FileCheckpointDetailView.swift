@@ -110,6 +110,7 @@ struct FileCheckpointDetailView<Checkpoint: FileCheckpointRepresentable>: View {
     private func restoreCheckpoint() {
         Task {
             do {
+                // Step 1: Load checkpoint content (background)
                 let content: Data
                 if let fileCheckpoint = checkpoint as? FileCheckpoint {
                     content = try await fileCheckpoint.loadContent()
@@ -118,28 +119,36 @@ struct FileCheckpointDetailView<Checkpoint: FileCheckpointRepresentable>: View {
                     content = checkpointContent
                 }
 
-                await MainActor.run {
-                    if checkpoint.fileID != nil {
+                // Step 2: Handle different file types
+                if checkpoint.fileID != nil {
+                    // Database file: Update on main thread
+                    await MainActor.run {
                         if case .file(let file) = fileState.currentActiveFile {
                             file.content = content
                             file.name = checkpoint.filename
                             fileState.excalidrawWebCoordinator?.loadFile(from: file, force: true)
                         }
-                    } else if case .localFolder(let folder) = fileState.currentActiveGroup,
-                              case .localFile(let fileURL) = fileState.currentActiveFile {
-                        do {
-                            try folder.withSecurityScopedURL { scopedURL in
-                                var file = try ExcalidrawFile(data: content)
-                                file.id = ExcalidrawFile.localFileURLIDMapping[fileURL] ?? UUID().uuidString
-                                fileState.excalidrawWebCoordinator?.loadFile(from: file, force: true)
-                                try content.write(to: fileURL)
-                            }
-                        } catch {
-                            alertToast(error)
-                        }
+                        fileState.didUpdateFile = false
+                        dismiss()
                     }
-                    fileState.didUpdateFile = false
-                    dismiss()
+                } else if case .localFolder(let folder) = fileState.currentActiveGroup,
+                          case .localFile(let fileURL) = fileState.currentActiveFile {
+                    // Parse file for UI update (before security-scoped access)
+                    var parsedFile = try ExcalidrawFile(data: content)
+                    parsedFile.id = ExcalidrawFile.localFileURLIDMapping[fileURL] ?? UUID().uuidString
+
+                    // Local file: Write to disk with security-scoped access
+                    try await folder.withSecurityScopedURL { _ in
+                        // Write to disk with FileCoordinator (background operation)
+                        try await FileCoordinator.shared.coordinatedWrite(url: fileURL, data: content)
+                    }
+
+                    // Update UI on main thread (after file is written)
+                    await MainActor.run {
+                        fileState.excalidrawWebCoordinator?.loadFile(from: parsedFile, force: true)
+                        fileState.didUpdateFile = false
+                        dismiss()
+                    }
                 }
             } catch {
                 await MainActor.run {

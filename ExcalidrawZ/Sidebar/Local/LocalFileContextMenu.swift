@@ -377,49 +377,51 @@ struct LocalFileRowMenuItems: View {
     private func duplicateFile() {
         let filesToDuplicate = Array(files)
         var fileToBeActive: URL? = nil
-        
-        do {
-            guard case .localFolder(let folder) = fileState.currentActiveGroup else { return }
-            try folder.withSecurityScopedURL { scopedURL in
-                
-                for sourceFile in filesToDuplicate {
-                    
-                    let file = try ExcalidrawFile(contentsOf: sourceFile)
-                    
-                    var newFileName = sourceFile.deletingPathExtension().lastPathComponent
-                    while FileManager.default.fileExists(at: scopedURL.appendingPathComponent(newFileName, conformingTo: .excalidrawFile)) {
-                        let components = newFileName.components(separatedBy: "-")
-                        if components.count == 2, let numComponent = components.last, let index = Int(numComponent) {
-                            newFileName = "\(components[0])-\(index+1)"
-                        } else {
-                            newFileName = "\(newFileName)-1"
+
+        Task {
+            do {
+                guard case .localFolder(let folder) = fileState.currentActiveGroup else { return }
+                try await folder.withSecurityScopedURL { scopedURL async throws in
+
+                    for sourceFile in filesToDuplicate {
+
+                        let file = try ExcalidrawFile(contentsOf: sourceFile)
+
+                        var newFileName = sourceFile.deletingPathExtension().lastPathComponent
+                        while FileManager.default.fileExists(at: scopedURL.appendingPathComponent(newFileName, conformingTo: .excalidrawFile)) {
+                            let components = newFileName.components(separatedBy: "-")
+                            if components.count == 2, let numComponent = components.last, let index = Int(numComponent) {
+                                newFileName = "\(components[0])-\(index+1)"
+                            } else {
+                                newFileName = "\(newFileName)-1"
+                            }
+                        }
+
+                        let newURL = sourceFile.deletingLastPathComponent().appendingPathComponent(newFileName, conformingTo: .excalidrawFile)
+
+                        // Use FileCoordinator for safe atomic write
+                        guard let data = file.content else { continue }
+                        try await FileCoordinator.shared.coordinatedWrite(url: newURL, data: data)
+
+                        if filesToDuplicate.count == 1,
+                           filesToDuplicate[0] == sourceFile {
+                            fileToBeActive = newURL
                         }
                     }
-                    
-                    let newURL = sourceFile.deletingLastPathComponent().appendingPathComponent(newFileName, conformingTo: .excalidrawFile)
-                    
-                    let fileCoordinator = NSFileCoordinator()
-                    fileCoordinator.coordinate(writingItemAt: newURL, options: .forReplacing, error: nil) { url in
-                        do {
-                            try file.content?.write(to: url)
-                        } catch {
-                            alertToast(error)
+
+                    await MainActor.run {
+                        if let fileToBeActive,
+                           let sourceFile = filesToDuplicate.first,
+                           fileState.currentActiveFile == .localFile(sourceFile) {
+                            fileState.setActiveFile(.localFile(fileToBeActive))
                         }
-                    }
-                    
-                    if filesToDuplicate.count == 1,
-                       filesToDuplicate[0] == sourceFile {
-                        fileToBeActive = newURL
                     }
                 }
-                if let fileToBeActive,
-                   let sourceFile = filesToDuplicate.first,
-                   fileState.currentActiveFile == .localFile(sourceFile) {
-                    fileState.setActiveFile(.localFile(fileToBeActive))
+            } catch {
+                await MainActor.run {
+                    alertToast(error)
                 }
             }
-        } catch {
-            alertToast(error)
         }
     }
     
@@ -429,63 +431,53 @@ struct LocalFileRowMenuItems: View {
         let currentActiveFile: URL? = if case .localFile(let currentFile) = fileState.currentActiveFile {
             currentFile
         } else { nil }
-        do {
-            let mapping = try LocalFileUtils.moveLocalFiles(filesToMove, to: targetFolderID, context: context)
-            
-            if let currentActiveFile, let newURL = mapping[currentActiveFile] {
-                DispatchQueue.main.async {
-                    fileState.setActiveFile(.localFile(newURL))
+
+        Task {
+            do {
+                let mapping = try await LocalFileUtils.moveLocalFiles(filesToMove, to: targetFolderID, context: context)
+
+                if let currentActiveFile, let newURL = mapping[currentActiveFile] {
+                    await MainActor.run {
+                        fileState.setActiveFile(.localFile(newURL))
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    alertToast(error)
                 }
             }
-        } catch {
-            alertToast(error)
         }
     }
     
     private func moveToTrash() {
         let filesToDelete = Array(files)
-        
-        do {
-            if case .localFolder(let folder) = fileState.currentActiveGroup {
-                try folder.withSecurityScopedURL { _ in
-                    // Item removed will be handled in `LocalFilesListView`
-                    let fileCoordinator = NSFileCoordinator()
-                    
-                    for file in filesToDelete {
-                        fileCoordinator.coordinate(
-                            writingItemAt: file,
-                            options: .forDeleting,
-                            error: nil
-                        ) { url in
-                            do {
-                                try FileManager.default.trashItem(
-                                    at: url,
-                                    resultingItemURL: nil
-                                )
-                            } catch {
-                                alertToast(error)
+
+        Task {
+            do {
+                if case .localFolder(let folder) = fileState.currentActiveGroup {
+                    try await folder.withSecurityScopedURL { _ async throws in
+                        // Item removed will be handled in `LocalFilesListView`
+                        for file in filesToDelete {
+                            _ = try await FileCoordinator.shared.coordinatedTrash(url: file)
+                        }
+                    }
+
+                    await MainActor.run {
+                        if let currentActiveFile = {
+                            if case .localFile(let file) = fileState.currentActiveFile {
+                                return file
                             }
+                            return nil
+                        }(), filesToDelete.contains(currentActiveFile) {
+                            fileState.setActiveFile(nil)
                         }
                     }
                 }
-                
-                if let currentActiveFile = {
-                    if case .localFile(let file) = fileState.currentActiveFile {
-                        return file
-                    }
-                    return nil
-                }(), filesToDelete.contains(currentActiveFile) {
-                    fileState.setActiveFile(nil)
+            } catch {
+                await MainActor.run {
+                    alertToast(error)
                 }
-                
-                // Should change current local file...
-//                let folderURL = self.file.deletingLastPathComponent()
-//                let contents = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: [.nameKey])
-//                let file = contents.first(where: {$0.pathExtension == "excalidraw"})
-//                fileState.setActiveFile(file) == nil ? nil : .localFile(file!)
             }
-        } catch {
-            alertToast(error)
         }
     }
 }

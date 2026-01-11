@@ -477,25 +477,10 @@ final class FileState: ObservableObject {
             }
         }
         
-        let fileCoordinator = NSFileCoordinator()
-        
         let fileURL = scopedURL.appendingPathComponent(newFileName, conformingTo: .excalidrawFile)
-        
-        try await withCheckedThrowingContinuation { continuation in
-            fileCoordinator.coordinate(
-                writingItemAt: fileURL,
-                options: .forReplacing,
-                error: nil
-            ) { newURL in
-                // 文件操作
-                do {
-                    try data.write(to: newURL)
-                    continuation.resume()
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
+
+        // Use FileCoordinator for safe atomic write
+        try await FileCoordinator.shared.coordinatedWrite(url: fileURL, data: data)
         
         if active {
             await MainActor.run {
@@ -512,7 +497,10 @@ final class FileState: ObservableObject {
         let didUpdateFile = didUpdateFile
         var excalidrawFile = excalidrawFile
         try excalidrawFile.updateContentFilesFromFiles()
-        try JSONEncoder().encode(excalidrawFile).write(to: url)
+
+        // Use FileCoordinator for safe atomic write
+        guard let data = excalidrawFile.content else { return }
+        try await FileCoordinator.shared.coordinatedWrite(url: url, data: data)
         try await context.perform {
             let fetchRequest = NSFetchRequest<LocalFileCheckpoint>(entityName: "LocalFileCheckpoint")
             fetchRequest.predicate = NSPredicate(format: "url = %@", url as NSURL)

@@ -104,13 +104,15 @@ actor LocalFolderRepository {
 
         // Delete folder if requested
         if delete {
-            let fileCoordinator = NSFileCoordinator()
-            fileCoordinator.coordinate(
-                writingItemAt: folderURL,
-                options: .forMoving,
-                error: nil
-            ) { url in
-                try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            _ = try await FileCoordinator.shared.coordinatedTrash(url: folderURL)
+
+            // Also delete from Core Data
+            try await context.perform {
+                guard let folder = context.object(with: localFolderObjectID) as? LocalFolder else {
+                    return
+                }
+                context.delete(folder)
+                try context.save()
             }
         }
 
