@@ -98,7 +98,9 @@ struct ExcalidrawZApp: App {
 #if os(macOS) && !APP_STORE
     @StateObject private var updateChecker = UpdateChecker()
 #endif
-
+    
+    @State private var isArchiveFilesExporterPresented = false
+    
     let server = ExcalidrawServer()
     let logger = Logger(label: "ExcalidrawApp")
     
@@ -106,6 +108,10 @@ struct ExcalidrawZApp: App {
         WindowGroup {
             RootView()
                 .preferredColorScheme(appPrefernece.appearance.colorScheme)
+                .archiveFilesExporter(
+                    isPresented: $isArchiveFilesExporterPresented,
+                    context: PersistenceController.shared.container.viewContext,
+                ) { _ in }
                 .environment(\.managedObjectContext, PersistenceController.shared.container.viewContext)
                 .environmentObject(appPrefernece)
                 .environmentObject(store)
@@ -176,12 +182,15 @@ struct ExcalidrawZApp: App {
                 }
                 Button {
                     // MUST USE THIS INSTEAD OF VIEWCONTEXT
-                    Task {
-                        try? await archiveAllFiles(context: PersistenceController.shared.container.viewContext)
-                    }
+//                    Task {
+//                        try? await archiveAllFiles(context: PersistenceController.shared.container.viewContext)
+//                    }
+                    isArchiveFilesExporterPresented.toggle()
                 } label: {
                     Label(.localizable(.menubarButtonExportAll), systemSymbol: .squareAndArrowUp)
                 }
+                
+                
             }
             
             // MARK: View
