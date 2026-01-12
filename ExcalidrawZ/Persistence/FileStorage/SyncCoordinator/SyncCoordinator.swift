@@ -31,6 +31,14 @@ actor SyncCoordinator {
     // Debounce state
     private var pendingProcessTask: Task<Void, Never>?
     private let debounceInterval: TimeInterval = 0.5  // 500ms debounce
+
+    // DiffScan retry state
+    private var diffScanRetryTask: Task<Void, Never>?
+    private var diffScanRetryCount = 0
+    
+    // Orphan cleanup scheduling
+    private var orphanCleanupTask: Task<Void, Never>?
+    private let orphanCleanupDelay: TimeInterval = 60
     
     // Constants
     private let maxRetryCount = 3
@@ -368,10 +376,13 @@ actor SyncCoordinator {
     /// 1. Enumerate all files that should exist from CoreData
     /// 2. For each expected file, check if it exists locally and in iCloud
     /// 3. Create sync operations based on the state
-    /// 4. Clean up orphaned files (filesystem has but CoreData doesn't)
+    /// 4. Schedule orphan cleanup (filesystem has but CoreData doesn't)
     /// 5. If many files are missing (possible first sync), trigger container download and retry once
-    func performDiffScan() async throws {
+    func performDiffScan(allowRetry: Bool = true) async throws {
         logger.info("Starting DiffScan...")
+        if allowRetry {
+            diffScanRetryCount = 0
+        }
         
         // Check iCloud availability
         let status = await iCloudManager.checkICloudAvailability()
@@ -505,12 +516,26 @@ actor SyncCoordinator {
                     }
             }
         }
+
+        if status.isAvailable, !expectedFiles.isEmpty {
+            let missingRatio = Double(missingCount) / Double(expectedFiles.count)
+            if missingRatio >= 0.5 {
+                if allowRetry {
+                    logger.warning("High missing ratio (\(Int(missingRatio * 100))%) detected, triggering container download and retrying DiffScan")
+                    await triggerContainerDownloadIfNeeded()
+                    scheduleDiffScanRetry(after: 2, allowRetry: false)
+                } else if diffScanRetryCount < 1 {
+                    diffScanRetryCount += 1
+                    logger.warning("Missing ratio still high (\(Int(missingRatio * 100))%), scheduling DiffScan retry in 10s")
+                    scheduleDiffScanRetry(after: 10, allowRetry: false)
+                }
+            } else {
+                diffScanRetryCount = 0
+            }
+        }
         
-        // Step 5: Clean up orphaned files (files without CoreData entities)
-        await orphanCleaner.cleanupOrphanedFiles(
-            localFiles: localFiles,
-            iCloudFiles: iCloudFiles
-        )
+        // Step 5: Schedule orphan cleanup (delayed to avoid first-sync data loss)
+        scheduleOrphanCleanup()
         
         logger.info("DiffScan complete: found \(syncOperations.count) sync operations")
 
@@ -521,6 +546,82 @@ actor SyncCoordinator {
 
         // Process queue once after all operations are queued
         await processQueue()
+    }
+
+    private func scheduleOrphanCleanup() {
+        guard orphanCleanupTask == nil else { return }
+        orphanCleanupTask = Task { [weak self] in
+            guard let self = self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(self.orphanCleanupDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await self.performOrphanCleanup()
+        }
+    }
+
+    private func performOrphanCleanup() async {
+        defer { orphanCleanupTask = nil }
+
+        let status = await iCloudManager.checkICloudAvailability()
+        guard status.isAvailable else {
+            logger.info("Skipping orphan cleanup: iCloud unavailable, rescheduling")
+            scheduleOrphanCleanup()
+            return
+        }
+
+        let expectedFiles = await fileEnumerator.enumerateExpectedFiles()
+        if expectedFiles.isEmpty {
+            do {
+                let localFiles = try await fileEnumerator.enumerateLocalFiles()
+                let iCloudFiles = try await fileEnumerator.enumerateICloudFiles()
+                if !localFiles.isEmpty || !iCloudFiles.isEmpty {
+                    logger.warning("Skipping orphan cleanup: CoreData empty but storage has files, rescheduling")
+                    scheduleOrphanCleanup()
+                    return
+                }
+            } catch {
+                logger.warning("Skipping orphan cleanup: failed to enumerate files: \(error.localizedDescription)")
+                scheduleOrphanCleanup()
+                return
+            }
+        }
+
+        do {
+            let localFiles = try await fileEnumerator.enumerateLocalFiles()
+            let iCloudFiles = try await fileEnumerator.enumerateICloudFiles()
+            await orphanCleaner.cleanupOrphanedFiles(
+                localFiles: localFiles,
+                iCloudFiles: iCloudFiles
+            )
+        } catch {
+            logger.warning("Orphan cleanup failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func scheduleDiffScanRetry(after delay: TimeInterval, allowRetry: Bool) {
+        diffScanRetryTask?.cancel()
+        diffScanRetryTask = Task { [weak self] in
+            guard let self = self else { return }
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            do {
+                try await self.performDiffScan(allowRetry: allowRetry)
+            } catch {
+                self.logger.error("DiffScan retry failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func triggerContainerDownloadIfNeeded() async {
+        guard let containerURL = await iCloudManager.containerURL else {
+            logger.warning("iCloud container URL unavailable, cannot trigger download")
+            return
+        }
+        do {
+            try FileManager.default.startDownloadingUbiquitousItem(at: containerURL)
+            logger.info("Triggered iCloud container download")
+        } catch {
+            logger.warning("Failed to start iCloud container download: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Helper Methods

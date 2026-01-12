@@ -166,14 +166,6 @@ struct OpenFromURLModifier: ViewModifier {
             return
         }
         
-        
-        // handle excalidraw file
-        if !fileState.temporaryFiles.contains(where: {$0 == targetURL}) {
-            fileState.temporaryFiles.append(targetURL)
-        }
-
-        
-        fileState.currentActiveGroup = .temporary
         fileState.setActiveFile(.temporaryFile(targetURL))
         
         if let imageSendToNewFile {

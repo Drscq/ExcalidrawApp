@@ -39,6 +39,72 @@ struct DrawingSettingsPanel: View {
                 }
             }
             
+            // Font Family
+            SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsFontFamilyTitle)) {
+                OptionButtonGroup(
+                    options: [.handDrawn, .normal, .code],
+                    selectedValue: settings.currentItemFontFamily ?? .handDrawn
+                ) { value in
+                    settings.currentItemFontFamily = value
+                    onSettingsChange()
+                } label: { value in
+                    switch value {
+                        case .handDrawn:
+                            Image(systemSymbol: .pencil)
+                        case .normal:
+                            Image(systemSymbol: .character)
+                        case .code:
+                            Image(systemSymbol: .chevronLeftForwardslashChevronRight)
+                    }
+                }
+            }
+
+            // Font Size
+            SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsFontSizeTitle)) {
+                OptionButtonGroup(
+                    options: [16.0, 20.0, 28.0, 36.0],
+                    selectedValue: settings.currentItemFontSize ?? 20
+                ) { value in
+                    settings.currentItemFontSize = value
+                    onSettingsChange()
+                } label: { value in
+                    switch value {
+                        case 16:
+                            Text("S")
+                        case 20:
+                            Text("M")
+                        case 28:
+                            Text("L")
+                        case 36:
+                            Text("XL")
+                        default:
+                            Text(value.formatted())
+                    }
+                }
+            }
+
+            // Text Align
+            SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsTextAlignTitle)) {
+                OptionButtonGroup(
+                    options: ["left", "center", "right"],
+                    selectedValue: settings.currentItemTextAlign ?? "left"
+                ) { value in
+                    settings.currentItemTextAlign = value
+                    onSettingsChange()
+                } label: { value in
+                    switch value {
+                        case "left":
+                            Image(systemSymbol: .textAlignleft)
+                        case "center":
+                            Image(systemSymbol: .textAligncenter)
+                        case "right":
+                            Image(systemSymbol: .textAlignright)
+                        default:
+                            Text(value)
+                    }
+                }
+            }
+            
             // Fill Style
             if settings.currentItemBackgroundColor != "transparent" {
                 SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsFillTitle)) {
@@ -114,7 +180,7 @@ struct DrawingSettingsPanel: View {
                     }
                 }
             }
-            
+
             // Sloppiness (Roughness)
             SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsSloppinessTitle)) {
                 OptionButtonGroup(
@@ -171,6 +237,66 @@ struct DrawingSettingsPanel: View {
                     }
                 }
             }
+            
+            // Arrow Type
+            SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsStartArrowTypeTitle)) {
+                OptionButtonGroup(
+                    options: [.sharp, .round, .elbow],
+                    selectedValue: settings.currentItemArrowType ?? .sharp
+                ) { value in
+                    settings.currentItemArrowType = value
+                    onSettingsChange()
+                } label: { value in
+                    switch value {
+                        case .sharp:
+                            Image(systemSymbol: .arrowUpRight)
+                        case .round:
+                            Image(systemSymbol: .arrowTurnUpRight)
+                        case .elbow:
+                            if #available(macOS 15.0, iOS 18.0, *) {
+                                Image(systemSymbol: .arrowTriangleheadSwap)
+                            } else {
+                                Image(systemSymbol: .arrowTriangleSwap)
+                            }
+                    }
+                }
+            }
+            
+            // Arrowhead
+            SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsStartArrowheadTitle)) {
+                HStack(spacing: 8) {
+                    ArrowheadPicker(
+                        selectedArrowhead: Binding(
+                            get: { settings.currentItemStartArrowhead },
+                            set: { newValue in
+                                settings.currentItemStartArrowhead = newValue
+                            }
+                        ),
+                        direction: .start,
+                        onEditingChanged: { editing in
+                            if !editing {
+                                onSettingsChange()
+                            }
+                        }
+                    )
+                    
+                    ArrowheadPicker(
+                        selectedArrowhead: Binding(
+                            get: { settings.currentItemEndArrowhead },
+                            set: { newValue in
+                                settings.currentItemEndArrowhead = newValue
+                            }
+                        ),
+                        direction: .end,
+                        onEditingChanged: { editing in
+                            if !editing {
+                                onSettingsChange()
+                            }
+                        }
+                    )
+                }
+            }
+
             
             // Opacity
             SettingSection(title: String(localizable: .settingsExcalidrawDrawingSettingsOpacityTitle)) {

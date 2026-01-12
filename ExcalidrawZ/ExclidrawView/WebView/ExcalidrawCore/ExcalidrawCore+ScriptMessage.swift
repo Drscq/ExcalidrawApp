@@ -29,8 +29,6 @@ extension ExcalidrawCore: WKScriptMessageHandler {
             let data = try JSONSerialization.data(withJSONObject: message.body)
             let message = try JSONDecoder().decode(ExcalidrawZMessage.self, from: data)
             
-//            self.logger.info("[WKScriptMessageHandler] Did receive message: \(String(describing: message))")
-            // let start = Date()
             switch message {
                 case .onload:
                     DispatchQueue.main.async {
@@ -136,7 +134,6 @@ extension ExcalidrawCore: WKScriptMessageHandler {
                     // self.onWebLog(message: logMessage)
                     break
             }
-            // print("[DEBUG] ExcalidrawCore didReceive message, time cost:", Date().timeIntervalSince(start).formatted())
         } catch {
             self.logger.error("[WKScriptMessageHandler] Decode received message failed. Raw data:\n\(String(describing: message.body))")
             self.publishError(error)
@@ -913,7 +910,6 @@ extension Notification.Name {
 
 extension ExcalidrawFile {
     mutating func update(data: ExcalidrawView.Coordinator.ExcalidrawFileData) throws {
-        // let start = Date()
         guard let content = self.content else {
             struct EmptyContentError: LocalizedError {
                 var errorDescription: String? { "Invalid excalidraw file." }
@@ -937,9 +933,6 @@ extension ExcalidrawFile {
         self.content = try JSONSerialization.data(withJSONObject: contentObject)
         self.elements = data.elements ?? []
         self.files = data.files
-        
-        // print("[DEBUG] On State Change. Time consume", Date().timeIntervalSince(start).formatted())
-
     }
 }
  

@@ -158,6 +158,9 @@ public actor FileCoordinator {
     /// Write data to a file safely with coordinated access
     ///
     /// Works for both local and iCloud files.
+    /// Automatically detects if file exists and uses appropriate coordination options:
+    /// - .forReplacing if file exists (triggers "modified" event)
+    /// - No options if file doesn't exist (triggers "created" event)
     ///
     /// - Parameters:
     ///   - url: The file URL to write to
@@ -170,14 +173,18 @@ public actor FileCoordinator {
             var coordinationError: NSError?
             let coordinator = NSFileCoordinator()
 
+            // Check if file exists to use appropriate coordination option
+            let fileExists = FileManager.default.fileExists(atPath: url.path)
+            let options: NSFileCoordinator.WritingOptions = fileExists ? .forReplacing : []
+
             coordinator.coordinate(
                 writingItemAt: url,
-                options: .forReplacing,
+                options: options,
                 error: &coordinationError
             ) { coordinatedURL in
                 do {
                     try data.write(to: coordinatedURL, options: .atomic)
-                    logger.info("Successfully wrote file: \(url.lastPathComponent)")
+                    logger.info("Successfully wrote file: \(url.lastPathComponent) (fileExists: \(fileExists))")
                     continuation.resume()
                 } catch {
                     logger.error("Failed to write file: \(url.lastPathComponent) - \(error)")
@@ -217,6 +224,126 @@ public actor FileCoordinator {
                 } catch {
                     logger.error("Failed to delete file: \(url.lastPathComponent) - \(error)")
                     continuation.resume(throwing: FileCoordinatorError.deleteFailed(error))
+                }
+            }
+
+            if let coordinationError = coordinationError {
+                logger.error("File coordination error: \(coordinationError)")
+                continuation.resume(throwing: FileCoordinatorError.coordinationFailed(coordinationError))
+            }
+        }
+    }
+
+    /// Move a file or directory safely with coordinated access
+    ///
+    /// Works for both local and iCloud files.
+    ///
+    /// - Parameters:
+    ///   - source: The source file/directory URL
+    ///   - destination: The destination file/directory URL
+    /// - Throws: Error if unable to move item
+    public func coordinatedMove(from source: URL, to destination: URL) async throws {
+        logger.info("Moving \(source.lastPathComponent) to \(destination.lastPathComponent)")
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var coordinationError: NSError?
+            let coordinator = NSFileCoordinator()
+
+            coordinator.coordinate(
+                writingItemAt: destination,
+                options: .forMoving,
+                error: &coordinationError
+            ) { coordinatedURL in
+                do {
+                    try FileManager.default.moveItem(at: source, to: coordinatedURL)
+                    logger.info("Successfully moved \(source.lastPathComponent) to \(destination.lastPathComponent)")
+                    continuation.resume()
+                } catch {
+                    logger.error("Failed to move file: \(source.lastPathComponent) - \(error)")
+                    continuation.resume(throwing: FileCoordinatorError.moveFailed(error))
+                }
+            }
+
+            if let coordinationError = coordinationError {
+                logger.error("File coordination error: \(coordinationError)")
+                continuation.resume(throwing: FileCoordinatorError.coordinationFailed(coordinationError))
+            }
+        }
+    }
+
+    /// Move a file or directory to trash with coordinated access
+    ///
+    /// Works for both local and iCloud files.
+    ///
+    /// - Parameter url: The file/directory URL to trash
+    /// - Returns: The URL of the trashed item, or nil if not provided by the system
+    /// - Throws: Error if unable to trash item
+    public func coordinatedTrash(url: URL) async throws -> URL? {
+        logger.info("Trashing: \(url.lastPathComponent)")
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var coordinationError: NSError?
+            let coordinator = NSFileCoordinator()
+
+            coordinator.coordinate(
+                writingItemAt: url,
+                options: .forDeleting,
+                error: &coordinationError
+            ) { coordinatedURL in
+                do {
+                    var resultingURL: NSURL?
+                    try FileManager.default.trashItem(
+                        at: coordinatedURL,
+                        resultingItemURL: &resultingURL
+                    )
+                    logger.info("Successfully trashed: \(url.lastPathComponent)")
+                    continuation.resume(returning: resultingURL as URL?)
+                } catch {
+                    logger.error("Failed to trash file: \(url.lastPathComponent) - \(error)")
+                    continuation.resume(throwing: FileCoordinatorError.trashFailed(error))
+                }
+            }
+
+            if let coordinationError = coordinationError {
+                logger.error("File coordination error: \(coordinationError)")
+                continuation.resume(throwing: FileCoordinatorError.coordinationFailed(coordinationError))
+            }
+        }
+    }
+
+    /// Create a directory with coordinated access
+    ///
+    /// Works for both local and iCloud directories.
+    ///
+    /// - Parameters:
+    ///   - url: The directory URL to create
+    ///   - withIntermediateDirectories: Whether to create intermediate directories
+    /// - Throws: Error if unable to create directory
+    public func coordinatedCreateDirectory(
+        at url: URL,
+        withIntermediateDirectories: Bool = false
+    ) async throws {
+        logger.info("Creating directory: \(url.lastPathComponent)")
+
+        return try await withCheckedThrowingContinuation { continuation in
+            var coordinationError: NSError?
+            let coordinator = NSFileCoordinator()
+
+            coordinator.coordinate(
+                writingItemAt: url,
+                options: .forReplacing,
+                error: &coordinationError
+            ) { coordinatedURL in
+                do {
+                    try FileManager.default.createDirectory(
+                        at: coordinatedURL,
+                        withIntermediateDirectories: withIntermediateDirectories
+                    )
+                    logger.info("Successfully created directory: \(url.lastPathComponent)")
+                    continuation.resume()
+                } catch {
+                    logger.error("Failed to create directory: \(url.lastPathComponent) - \(error)")
+                    continuation.resume(throwing: FileCoordinatorError.writeFailed(error))
                 }
             }
 
@@ -316,6 +443,8 @@ public actor FileCoordinator {
 public enum FileCoordinatorError: LocalizedError {
     case writeFailed(Error)
     case deleteFailed(Error)
+    case moveFailed(Error)
+    case trashFailed(Error)
     case coordinationFailed(Error)
 
     public var errorDescription: String? {
@@ -324,6 +453,10 @@ public enum FileCoordinatorError: LocalizedError {
             return "Failed to write file: \(error.localizedDescription)"
         case .deleteFailed(let error):
             return "Failed to delete file: \(error.localizedDescription)"
+        case .moveFailed(let error):
+            return "Failed to move file: \(error.localizedDescription)"
+        case .trashFailed(let error):
+            return "Failed to trash file: \(error.localizedDescription)"
         case .coordinationFailed(let error):
             return "File coordination failed: \(error.localizedDescription)"
         }

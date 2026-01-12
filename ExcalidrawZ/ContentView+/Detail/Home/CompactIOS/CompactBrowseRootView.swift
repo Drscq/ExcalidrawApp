@@ -172,7 +172,7 @@ struct CompactBrowseRootView: View {
             SettingsViewButton()
         }
         
-        ToolbarItem(placement: .automatic) {
+        ToolbarItemGroup(placement: .automatic) {
             Menu {
                 SwiftUI.Group {
                     Button {
@@ -262,14 +262,18 @@ struct CompactBrowserDestinationView: View {
         }
         .navigationBarBackButtonHidden(editMode?.wrappedValue.isEditing == true)
         .toolbar {
-            ToolbarItem(placement: .automatic) {
+            ToolbarItemGroup(placement: .automatic) {
                 if let group = group as? Group {
                     if group.groupType == .trash {
                         
                     } else {
+                        NewFileButton(openWithDelay: true)
+
                         CompactContentMoreMenu(group: group)
                     }
                 } else if let group = group as? LocalFolder {
+                    NewFileButton(openWithDelay: true)
+
                     CompactContentMoreMenu(group: group)
                 }
             }
@@ -478,7 +482,7 @@ struct CompactContentMoreMenu<HomeGroup: ExcalidrawGroup>: View {
                         }
                     }
                 }
-                
+
                 Section {
                     Picker("", selection: $layoutState.compactBrowserLayout) {
                         Label(

@@ -80,91 +80,84 @@ class LocalFileUtils {
         to targetFolderID: NSManagedObjectID,
         context: NSManagedObjectContext
     ) async throws {
-        try await context.perform {
+        let (sourceURL, targetURL) = try await context.perform {
             guard case let folder as LocalFolder = context.object(with: folderID),
                   case let targetFolder as LocalFolder = context.object(with: targetFolderID),
                   let targetURL = targetFolder.url,
-                  let sourceURL = folder.url else { return }
-            
-            /// Get the final target folder URL
-            var newURL: URL = targetURL.appendingPathComponent(
-                sourceURL.lastPathComponent,
+                  let sourceURL = folder.url else {
+                throw CancellationError()
+            }
+            return (sourceURL, targetURL)
+        }
+
+        /// Get the final target folder URL
+        var newURL: URL = targetURL.appendingPathComponent(
+            sourceURL.lastPathComponent,
+            conformingTo: .directory
+        )
+
+        if newURL == sourceURL { return }
+
+        var candidateIndex = 1
+        while FileManager.default.fileExists(at: newURL) {
+            newURL = targetURL.appendingPathComponent(
+                sourceURL.lastPathComponent + "_\(candidateIndex)",
                 conformingTo: .directory
             )
-            
-            if newURL == sourceURL { return }
-            
-            var candidateIndex = 1
-            while FileManager.default.fileExists(at: newURL) {
-                newURL = targetURL.appendingPathComponent(
-                    sourceURL.lastPathComponent + "_\(candidateIndex)",
-                    conformingTo: .directory
-                )
-                candidateIndex += 1
+            candidateIndex += 1
+        }
+
+        // find all files in sourceURL to update mappings
+        // Collect all files first to avoid Swift 6 async iterator warning
+        let allFiles: [URL] = {
+            guard let enumerator = FileManager.default.enumerator(
+                at: sourceURL,
+                includingPropertiesForKeys: []
+            ) else {
+                return []
             }
-            
-            
-            try folder.withSecurityScopedURL { sourceURL in
-                try targetFolder.withSecurityScopedURL { taretURL in
-                    
-                    // find all files in sourceURL...
-                    guard let enumerator = FileManager.default.enumerator(
-                        at: sourceURL,
-                        includingPropertiesForKeys: []
-                    ) else {
-                        return
-                    }
-                    
-                    for case let file as URL in enumerator {
-                        // get the changed folder
-                        let relativePath = file.filePath.suffix(from: sourceURL.filePath.endIndex)
-                        let fileNewURL = if #available(macOS 13.0, *) {
-                            newURL.appending(path: relativePath)
-                        } else {
-                            newURL.appendingPathComponent(String(relativePath))
-                        }
-                        
-                        // Update local file ID mapping
-                        ExcalidrawFile.localFileURLIDMapping[fileNewURL] = ExcalidrawFile.localFileURLIDMapping[file]
-                        ExcalidrawFile.localFileURLIDMapping[file] = nil
-                        
-                        // Also update checkpoints in background
-                        self.updateCheckpoints(oldURL: file, newURL: fileNewURL)
-                    }
-                    
-                    /// update the folder URL
-                    let fileCoordinator = NSFileCoordinator()
-                    fileCoordinator.coordinate(writingItemAt: taretURL, options: .forMoving, error: nil) { url in
-                        do {
-                            try FileManager.default.moveItem(
-                                at: sourceURL,
-                                to: newURL
-                            )
-                        } catch {
-                            print(error)
-                        }
-                    }
-                    
-                    // update LocalFolder
-                    guard case let folder as LocalFolder = context.object(with: folderID),
-                          let targetFolder = context.object(with: targetFolderID) as? LocalFolder else {
-                        return
-                    }
-                    folder.url = newURL
-                    folder.filePath = newURL.filePath
+            return enumerator.compactMap { $0 as? URL }
+        }()
+
+        // Update mappings for all files
+        for file in allFiles {
+            // get the changed folder
+            let relativePath = file.filePath.suffix(from: sourceURL.filePath.endIndex)
+            let fileNewURL = if #available(macOS 13.0, *) {
+                newURL.appending(path: relativePath)
+            } else {
+                newURL.appendingPathComponent(String(relativePath))
+            }
+
+            // Update local file ID mapping
+            ExcalidrawFile.localFileURLIDMapping[fileNewURL] = ExcalidrawFile.localFileURLIDMapping[file]
+            ExcalidrawFile.localFileURLIDMapping[file] = nil
+
+            // Also update checkpoints in background
+            self.updateCheckpoints(oldURL: file, newURL: fileNewURL)
+        }
+
+        /// Move the folder with coordinated access
+        try await FileCoordinator.shared.coordinatedMove(from: sourceURL, to: newURL)
+
+        try await context.perform {
+            guard case let folder as LocalFolder = context.object(with: folderID),
+                  let targetFolder = context.object(with: targetFolderID) as? LocalFolder else {
+                return
+            }
+            folder.url = newURL
+            folder.filePath = newURL.filePath
 #if os(macOS)
-                    let options: URL.BookmarkCreationOptions = [.withSecurityScope]
+            let options: URL.BookmarkCreationOptions = [.withSecurityScope]
 #elseif os(iOS)
-                    let options: URL.BookmarkCreationOptions = []
+            let options: URL.BookmarkCreationOptions = []
 #endif
-                    folder.bookmarkData = try newURL.bookmarkData(
-                        options: options,
-                        includingResourceValuesForKeys: [.nameKey]
-                    )
-                    folder.parent = targetFolder
-                    try context.save()
-                }
-            }
+            folder.bookmarkData = try newURL.bookmarkData(
+                options: options,
+                includingResourceValuesForKeys: [.nameKey]
+            )
+            folder.parent = targetFolder
+            try context.save()
         }
     }
     
@@ -189,52 +182,39 @@ class LocalFileUtils {
         _ filesToMove: [URL],
         to folderID: NSManagedObjectID,
         context: NSManagedObjectContext
-    ) throws -> [URL : URL] {
+    ) async throws -> [URL : URL] {
         guard case let folder as LocalFolder = context.object(with: folderID) else { return [:] }
-        return try folder.withSecurityScopedURL { scopedURL in
+        return try await folder.withSecurityScopedURL { scopedURL async throws -> [URL : URL] in
             var urlMapping = [URL : URL]()
+            let fileManager = FileManager.default
 
-            let fileCoordinator = NSFileCoordinator()
-            fileCoordinator.coordinate(
-                writingItemAt: scopedURL,
-                options: .forMoving,
-                error: nil
-            ) { url in
-                let fileManager = FileManager.default
-                do {
-                    for file in filesToMove {
-                        
-                        var newURL = url.appendingPathComponent(
-                            file.deletingPathExtension().lastPathComponent,
-                            conformingTo: .excalidrawFile
-                        )
-                        var i = 1
-                        while fileManager.fileExists(at: newURL) {
-                            newURL = url.appendingPathComponent(
-                                file.deletingPathExtension().lastPathComponent + " (\(i))",
-                                conformingTo: .excalidrawFile
-                            )
-                            i += 1
-                        }
-                        
-                        try fileManager.moveItem(
-                            at: file,
-                            to: newURL
-                        )
-                        
-                        // Update local file ID mapping
-                        ExcalidrawFile.localFileURLIDMapping[newURL] = ExcalidrawFile.localFileURLIDMapping[file]
-                        ExcalidrawFile.localFileURLIDMapping[file] = nil
-                        
-                        // Also update checkpoints
-                        self.updateCheckpoints(oldURL: file, newURL: newURL)
-                        
-                        urlMapping[file] = newURL
-                    }
-                } catch {
-                    print(error)
+            for file in filesToMove {
+
+                var newURL = scopedURL.appendingPathComponent(
+                    file.deletingPathExtension().lastPathComponent,
+                    conformingTo: .excalidrawFile
+                )
+                var i = 1
+                while fileManager.fileExists(at: newURL) {
+                    newURL = scopedURL.appendingPathComponent(
+                        file.deletingPathExtension().lastPathComponent + " (\(i))",
+                        conformingTo: .excalidrawFile
+                    )
+                    i += 1
                 }
+
+                try await FileCoordinator.shared.coordinatedMove(from: file, to: newURL)
+
+                // Update local file ID mapping
+                ExcalidrawFile.localFileURLIDMapping[newURL] = ExcalidrawFile.localFileURLIDMapping[file]
+                ExcalidrawFile.localFileURLIDMapping[file] = nil
+
+                // Also update checkpoints
+                self.updateCheckpoints(oldURL: file, newURL: newURL)
+
+                urlMapping[file] = newURL
             }
+
             return urlMapping
         }
     }

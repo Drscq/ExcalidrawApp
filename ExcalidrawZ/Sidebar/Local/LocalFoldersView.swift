@@ -155,6 +155,9 @@ struct LocalFoldersView: View {
                 onDelete: onDeleteSelected
             )
             .modifier(LocalFolderDragModifier(folder: folder))
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                fileState.expandToGroup(folder.objectID)
+            })
         }
         .extraLabelStyle { content in
             content

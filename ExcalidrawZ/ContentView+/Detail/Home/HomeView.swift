@@ -7,6 +7,7 @@
 
 import SwiftUI
 import ChocofordUI
+import SmoothGradient
 
 struct BoundsPreferenceKey: PreferenceKey {
     static var defaultValue: [String : Anchor<CGRect>] = [:]
@@ -272,9 +273,9 @@ private struct RecentlyFilesSection: View {
             }
             .font(.headline)
             
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    RecentlyFilesProvider { recentlyFiles in
+            RecentlyFilesProvider { recentlyFiles in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
                         ForEach(recentlyFiles) { file in
                             FileHomeItemView(
                                 file: file,
@@ -284,27 +285,47 @@ private struct RecentlyFilesSection: View {
                         }
                         
                         if recentlyFiles.isEmpty {
-                            ForEach(0..<10) { _ in
-                                RoundedRectangle(cornerRadius: FileHomeItemView.roundedCornerRadius)
-                                    .fill(.secondary.opacity(0.5))
-                                    .frame(width: 200, height: 200 * 0.6)
+                            HStack(spacing: 10) {
+                                ForEach(0..<10) { _ in
+                                    RoundedRectangle(cornerRadius: FileHomeItemView.roundedCornerRadius)
+                                        .fill(.secondary.opacity(0.6))
+                                        .frame(width: 200, height: 200 * 0.6)
+                                }
+                            }
+                            .mask {
+                                if #available(macOS 14.0, iOS 17.0, *) {
+                                    SmoothLinearGradient(
+                                        from: .white.opacity(0.2),
+                                        to: .clear,
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                } else {
+                                    LinearGradient(
+                                        gradient: Gradient(stops: [
+                                            .init(color: .white.opacity(0.2), location: 0),
+                                            .init(color: .clear, location: 1)
+                                        ]),
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                }
+                                
                             }
                         }
                     }
+                    .padding(10)
                 }
-                .padding(10)
+                .offset(x: -10)
+                .scrollClipDisabledIfAvailable()
+                .overlay {
+                    if recentlyFiles.isEmpty {
+                        Text(localizable: .homeRecentlyPlaceholder)
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
-            .offset(x: -10)
-            .scrollClipDisabledIfAvailable()
-//            .overlay {
-//                RecentlyFilesProvider { recentlyFiles in
-//                    if recentlyFiles.isEmpty {
-//                        Text("No recently files...")
-//                            .font(.footnote)
-//                            .foregroundStyle(.secondary)
-//                    }
-//                }
-//            }
         }
     }
 

@@ -263,7 +263,7 @@ struct TemporaryFileMenuItems: View {
         guard !filesToMove.isEmpty else { return }
         Task.detached {
             do {
-                let mapping = try LocalFileUtils.moveLocalFiles(
+                let mapping = try await LocalFileUtils.moveLocalFiles(
                     filesToMove,
                     to: targetFolderID,
                     context: context

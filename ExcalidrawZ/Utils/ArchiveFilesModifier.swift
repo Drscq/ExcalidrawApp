@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreData
 import UniformTypeIdentifiers
+import Logging
 
 /// Information about a file that failed to archive
 struct FailedFileInfo: Identifiable {
@@ -30,6 +31,8 @@ struct ArchiveFilesModifier: ViewModifier {
     let context: NSManagedObjectContext
     let onComplete: (Result<ArchiveResult, Error>) -> Void
     var onCancellation: () -> Void
+
+    private let logger = Logger(label: "ArchiveFilesModifier")
     
     @State private var archiveDocument: ArchiveFolderDocument?
     @State private var isExporting = false
@@ -76,7 +79,10 @@ struct ArchiveFilesModifier: ViewModifier {
     }
     
     private func prepareArchive() async {
-        let folderName = "ExcalidrawZ exported at \(Date.now.formatted(date: .abbreviated, time: .shortened))"
+        let folderName = sanitizedFilename(
+            "ExcalidrawZ exported at \(Date.now.formatted(date: .abbreviated, time: .shortened))",
+            fallback: "ExcalidrawZ export"
+        )
         let archiveResult = await archiveAllCloudFilesWithErrorCollection(
             folderName: folderName,
             context: context
@@ -105,8 +111,8 @@ struct ArchiveFilesModifier: ViewModifier {
             for groupFiles in allFiles {
                 let group = groupFiles.key
                 let files = groupFiles.value
-                let folderPathComponents = group.ancestors.map { $0.name ?? "Untitled" }
-                    + [group.group.name ?? "Untitled"]
+                let folderPathComponents = group.ancestors.map { sanitizedFilename($0.name ?? "Untitled") }
+                    + [sanitizedFilename(group.group.name ?? "Untitled")]
                 let groupWrapper = archiveFolderWrapper(
                     for: folderPathComponents,
                     in: rootWrapper
@@ -117,7 +123,9 @@ struct ArchiveFilesModifier: ViewModifier {
                         var excalidrawFile = try await ExcalidrawFile(from: file)
                         try await excalidrawFile.syncFiles(context: context)
                         var index = 1
-                        var filename = excalidrawFile.name ?? String(localizable: .newFileNamePlaceholder)
+                        var filename = sanitizedFilename(
+                            excalidrawFile.name ?? String(localizable: .newFileNamePlaceholder)
+                        )
                         var retryCount = 0
                         var fileWrapperName = "\(filename).excalidraw"
                         while groupWrapper.fileWrappers?[fileWrapperName] != nil, retryCount < 100 {
@@ -129,6 +137,15 @@ struct ArchiveFilesModifier: ViewModifier {
                             fileWrapperName = "\(filename).excalidraw"
                             retryCount += 1
                         }
+                        if groupWrapper.fileWrappers?[fileWrapperName] != nil {
+                            let fileName = file.name ?? "Untitled"
+                            failedFiles.append(FailedFileInfo(
+                                fileName: fileName,
+                                error: "Duplicate filename after retries: \(fileWrapperName)"
+                            ))
+                            logger.error("Duplicate filename after retries: \(fileWrapperName)")
+                            continue
+                        }
                         let fileWrapper = FileWrapper(regularFileWithContents: excalidrawFile.content ?? Data())
                         fileWrapper.preferredFilename = fileWrapperName
                         groupWrapper.addFileWrapper(fileWrapper)
@@ -139,7 +156,7 @@ struct ArchiveFilesModifier: ViewModifier {
                             fileName: fileName,
                             error: error.localizedDescription
                         ))
-                        print("Failed to archive file '\(fileName)': \(error.localizedDescription)")
+                        logger.error("Failed to archive file '\(fileName)': \(error.localizedDescription)")
                     }
                 }
             }
@@ -149,6 +166,7 @@ struct ArchiveFilesModifier: ViewModifier {
                 fileName: "Archive",
                 error: "Failed to list files: \(error.localizedDescription)"
             ))
+            logger.error("Failed to list files for archive: \(error.localizedDescription)")
         }
         
         return (ArchiveFolderDocument(rootWrapper: rootWrapper), failedFiles)
@@ -162,6 +180,7 @@ struct ArchiveFilesModifier: ViewModifier {
                 onComplete(.success(archiveResult))
                 
             case .failure(let error):
+                logger.error("Archive export failed: \(error.localizedDescription)")
                 onComplete(.failure(error))
         }
         
@@ -209,6 +228,15 @@ private func archiveFolderWrapper(
     return currentWrapper
 }
 
+private func sanitizedFilename(_ name: String, fallback: String = "Untitled") -> String {
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let replaced = trimmed
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: ":", with: "_")
+        .replacingOccurrences(of: "\0", with: "_")
+    return replaced.isEmpty ? fallback : replaced
+}
+
 extension View {
     /// Present a file exporter to archive all files
     /// - Parameters:
@@ -219,7 +247,7 @@ extension View {
         isPresented: Binding<Bool>,
         context: NSManagedObjectContext,
         onComplete: @escaping (Result<ArchiveResult, Error>) -> Void,
-        onCancellation: @escaping () -> Void
+        onCancellation: @escaping () -> Void = {}
     ) -> some View {
         modifier(
             ArchiveFilesModifier(
@@ -229,5 +257,83 @@ extension View {
                 onCancellation: onCancellation
             )
         )
+    }
+}
+
+#if canImport(AppKit)
+
+@MainActor
+func archiveAllFiles(context: NSManagedObjectContext, completionHandler: (() -> Void)? = nil) async throws {
+    let panel = ExcalidrawOpenPanel.exportPanel
+    if panel.runModal() == .OK {
+        if let url = panel.url {
+            let filemanager = FileManager.default
+            do {
+                let exportURL = url.appendingPathComponent("ExcalidrawZ exported at \(Date.now.formatted(date: .abbreviated, time: .shortened))", conformingTo: .directory)
+                try filemanager.createDirectory(at: exportURL, withIntermediateDirectories: false)
+                try await archiveAllCloudFiles(to: exportURL, context: context)
+                completionHandler?()
+            } catch {
+                print(error)
+                throw error
+            }
+        } else {
+            throw AppError.fileError(.invalidURL)
+        }
+    }
+}
+#endif
+
+func archiveAllCloudFiles(to url: URL, context: NSManagedObjectContext) async throws {
+    let filemanager = FileManager.default
+    let allFiles:  [PersistenceController.ExcalidrawGroup : [File]] = try PersistenceController.shared.listAllFiles(context: context)
+
+    var errorDuringArchive: Error?
+
+    for groupFiles in allFiles {
+        let group = groupFiles.key
+        let files = groupFiles.value
+        var groupURL = url
+        for ancestor in group.ancestors {
+            groupURL = groupURL.appendingPathComponent(ancestor.name ?? "Untitled", conformingTo: .directory)
+        }
+        groupURL = groupURL.appendingPathComponent(group.group.name ?? "Untitled", conformingTo: .directory)
+        if !filemanager.fileExists(at: groupURL) {
+            try filemanager.createDirectory(at: groupURL, withIntermediateDirectories: true)
+        }
+
+        for file in files {
+            do {
+                var excalidrawFile = try await ExcalidrawFile(from: file)
+                try await excalidrawFile.syncFiles(context: context)
+                var index = 1
+                var filename = excalidrawFile.name ?? String(localizable: .newFileNamePlaceholder)
+                var fileURL: URL = groupURL.appendingPathComponent(filename, conformingTo: .fileURL).appendingPathExtension("excalidraw")
+                var retryCount = 0
+                while filemanager.fileExists(at: fileURL), retryCount < 100 {
+                    if filename.hasSuffix(" (\(index))") {
+                        filename = filename.replacingOccurrences(of: " (\(index))", with: "")
+                        index += 1
+                    }
+                    filename = "\(filename) (\(index))"
+                    fileURL = fileURL
+                        .deletingLastPathComponent()
+                        .appendingPathComponent(filename, conformingTo: .excalidrawFile)
+                    retryCount += 1
+                }
+                let filePath: String = fileURL.filePath
+                if !filemanager.createFile(atPath: filePath, contents: excalidrawFile.content) {
+                    print("export file \(filePath) failed")
+                } else {
+                    print("Export file to url<\(filePath)> done")
+                }
+            } catch {
+                errorDuringArchive = error
+            }
+        }
+    }
+
+    if let errorDuringArchive {
+        throw errorDuringArchive
     }
 }

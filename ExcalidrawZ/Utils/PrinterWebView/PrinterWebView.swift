@@ -32,7 +32,8 @@ class PrinterWebView: WKWebView {
 #if canImport(AppKit)
     typealias PlatformRect = NSRect
     var printInfo: NSPrintInfo = {
-        let printInfo = NSPrintInfo.shared
+        // Create a new instance instead of modifying shared
+        let printInfo = NSPrintInfo()
         printInfo.topMargin = 0
         printInfo.bottomMargin = 0
         printInfo.leftMargin = 0
@@ -108,12 +109,27 @@ extension PrinterWebView: WKNavigationDelegate {
 #if canImport(AppKit)
         let printOperation = webView.printOperation(with: printInfo)
         printOperation.view?.frame = webView.frame // important
+
+        // Enable print and progress panels so user can configure settings
+        printOperation.showsPrintPanel = true
+        printOperation.showsProgressPanel = true
+        printOperation.printPanel.options.formUnion([
+            .showsCopies,
+            .showsPageRange,
+            .showsPaperSize,
+            .showsOrientation,
+            .showsScaling,
+            .showsPreview,
+            .showsPageSetupAccessory,
+            .showsPrintSelection
+        ])
+
         if let window = webView.window ?? NSApp.keyWindow {
             printOperation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
         } else {
             Swift.print("No window for print")
         }
-        
+
         if let url = webView.url {
             self.printRequests[url]?()
         }

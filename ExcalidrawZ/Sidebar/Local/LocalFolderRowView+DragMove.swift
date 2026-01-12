@@ -347,13 +347,13 @@ struct LocalFolderDropModifier: ViewModifier {
         if folder.url == url.deletingLastPathComponent() { return false }
         // move file to this folder
         do {
-            let mapping = try LocalFileUtils.moveLocalFiles(
+            let mapping = try await LocalFileUtils.moveLocalFiles(
                 [url],
                 to: folder.objectID,
                 context: context
             )
             if fileState.currentActiveFile == .localFile(url), let newURL = mapping[url] {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     if let folder = viewContext.object(with: folder.objectID) as? LocalFolder {
                         fileState.currentActiveGroup = .localFolder(folder)
                     }
@@ -362,9 +362,11 @@ struct LocalFolderDropModifier: ViewModifier {
             }
             return true
         } catch {
-            alertToast(error)
+            await MainActor.run {
+                alertToast(error)
+            }
         }
-        
+
         return false
     }
     
@@ -410,12 +412,12 @@ struct LocalFolderDropModifier: ViewModifier {
         let folderID = folder.objectID
         let context = PersistenceController.shared.container.newBackgroundContext()
         do {
-            let mapping = try LocalFileUtils.moveLocalFiles(
+            let mapping = try await LocalFileUtils.moveLocalFiles(
                 [url],
                 to: folderID,
                 context: context
             )
-            
+
             await MainActor.run {
                 if let newURL = mapping[url],
                    fileState.currentActiveFile == .temporaryFile(url) ||
@@ -429,7 +431,9 @@ struct LocalFolderDropModifier: ViewModifier {
             }
             return true
         } catch {
-            alertToast(error)
+            await MainActor.run {
+                alertToast(error)
+            }
         }
         return false
     }

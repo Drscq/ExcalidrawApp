@@ -49,7 +49,7 @@ struct NewFileButton: View {
     
     var body: some View {
 #if os(iOS)
-        if fileState.currentActiveGroup != nil {
+        if fileState.currentActiveGroup != nil, containerHorizontalSizeClass != .compact {
             Button {
                 isFileImporterPresented.toggle()
             } label: {
@@ -311,6 +311,20 @@ struct NewFileButton: View {
                 alert(error: error)
             }
         }
+    }
+}
+
+struct ImportFileProvider: View {
+    
+    
+    var body: some View {
+        
+    }
+}
+
+struct ImportFileButton: View {
+    var body: some View {
+        
     }
 }
 

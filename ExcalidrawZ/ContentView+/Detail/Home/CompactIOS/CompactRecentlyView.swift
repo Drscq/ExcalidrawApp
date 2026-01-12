@@ -77,11 +77,8 @@ struct CompactRecentlyView: View {
                     }
                 }
                 ToolbarItemGroup(placement: .automatic) {
+                    NewFileButton(openWithDelay: true)
                     CompactContentMoreMenu()
-                }
-                
-                ToolbarItemGroup(placement: .bottomBar) {
-                    
                 }
             }
             .environment(\.editMode, $editMode)

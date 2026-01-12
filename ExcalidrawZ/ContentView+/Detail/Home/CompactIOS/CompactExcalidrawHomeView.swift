@@ -43,15 +43,27 @@ struct CompactExcalidrawHomeView: View {
             TabView {
                 Tab(.localizable(.compactRecentlyTitle), systemImage: SFSymbol.clockFill.rawValue) {
                     CompactRecentlyView()
+                        .onAppear {
+                            fileState.currentActiveGroup = nil
+                        }
                 }
                 Tab(.localizable(.collaborationHomeTitle), systemImage: SFSymbol.person3Fill.rawValue) {
                     CompactCollaborationHomeView()
+                        .onAppear {
+                            fileState.currentActiveGroup = .collaboration
+                        }
                 }
                 Tab(.localizable(.compactBrowserTitle), systemImage: SFSymbol.folderFill.rawValue) {
                     CompactBrowseRootView()
+                        .onAppear {
+                            fileState.currentActiveGroup = nil
+                        }
                 }
                 Tab(role: .search) {
                     CompactSearchFilesView()
+                        .onAppear {
+                            fileState.currentActiveGroup = nil
+                        }
                 }
             }
             .searchToolbarBehavior(.automatic)

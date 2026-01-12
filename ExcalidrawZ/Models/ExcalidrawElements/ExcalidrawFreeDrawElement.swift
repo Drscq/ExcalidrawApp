@@ -47,6 +47,99 @@ struct ExcalidrawFreeDrawElement: ExcalidrawFreeDrawElementBase {
     var pressures: [Double]
     var simulatePressure: Bool
     var lastCommittedPoint: Point?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case x
+        case y
+        case strokeColor
+        case backgroundColor
+        case fillStyle
+        case strokeWidth
+        case strokeStyle
+        case roundness
+        case roughness
+        case opacity
+        case width
+        case height
+        case angle
+        case seed
+        case version
+        case versionNonce
+        case index
+        case isDeleted
+        case groupIds
+        case frameId
+        case boundElements
+        case updated
+        case link
+        case locked
+        case customData
+        case type
+        case points
+        case pressures
+        case simulatePressure
+        case lastCommittedPoint
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(x, forKey: .x)
+        try container.encode(y, forKey: .y)
+        try container.encode(strokeColor, forKey: .strokeColor)
+        try container.encode(backgroundColor, forKey: .backgroundColor)
+        try container.encode(fillStyle, forKey: .fillStyle)
+        try container.encode(strokeWidth, forKey: .strokeWidth)
+        try container.encode(strokeStyle, forKey: .strokeStyle)
+        if let roundness {
+            try container.encode(roundness, forKey: .roundness)
+        } else {
+            try container.encodeNil(forKey: .roundness)
+        }
+        try container.encode(roughness, forKey: .roughness)
+        try container.encode(opacity, forKey: .opacity)
+        try container.encode(width, forKey: .width)
+        try container.encode(height, forKey: .height)
+        try container.encode(angle, forKey: .angle)
+        try container.encode(seed, forKey: .seed)
+        try container.encode(version, forKey: .version)
+        try container.encode(versionNonce, forKey: .versionNonce)
+        if let index {
+            try container.encode(index, forKey: .index)
+        } else {
+            try container.encodeNil(forKey: .index)
+        }
+        try container.encode(isDeleted, forKey: .isDeleted)
+        try container.encode(groupIds, forKey: .groupIds)
+        if let frameId {
+            try container.encode(frameId, forKey: .frameId)
+        } else {
+            try container.encodeNil(forKey: .frameId)
+        }
+        if let boundElements {
+            try container.encode(boundElements, forKey: .boundElements)
+        } else {
+            try container.encodeNil(forKey: .boundElements)
+        }
+        try container.encodeIfPresent(updated, forKey: .updated)
+        if let link {
+            try container.encode(link, forKey: .link)
+        } else {
+            try container.encodeNil(forKey: .link)
+        }
+        try container.encodeIfPresent(locked, forKey: .locked)
+        try container.encodeIfPresent(customData, forKey: .customData)
+        try container.encode(type, forKey: .type)
+        try container.encode(points, forKey: .points)
+        try container.encode(pressures, forKey: .pressures)
+        try container.encode(simulatePressure, forKey: .simulatePressure)
+        if let lastCommittedPoint {
+            try container.encode(lastCommittedPoint, forKey: .lastCommittedPoint)
+        } else {
+            try container.encodeNil(forKey: .lastCommittedPoint)
+        }
+    }
     
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs.id == rhs.id &&
@@ -109,6 +202,87 @@ struct ExcalidrawDrawElement: ExcalidrawElementBase {
     var locked: Bool? // not available in v1
     var customData: [String : AnyCodable]?
     var type: ExcalidrawElementType
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case x
+        case y
+        case strokeColor
+        case backgroundColor
+        case fillStyle
+        case strokeWidth
+        case strokeStyle
+        case roundness
+        case roughness
+        case opacity
+        case width
+        case height
+        case angle
+        case seed
+        case version
+        case versionNonce
+        case index
+        case isDeleted
+        case groupIds
+        case frameId
+        case boundElements
+        case updated
+        case link
+        case locked
+        case customData
+        case type
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(x, forKey: .x)
+        try container.encode(y, forKey: .y)
+        try container.encode(strokeColor, forKey: .strokeColor)
+        try container.encode(backgroundColor, forKey: .backgroundColor)
+        try container.encode(fillStyle, forKey: .fillStyle)
+        try container.encode(strokeWidth, forKey: .strokeWidth)
+        try container.encode(strokeStyle, forKey: .strokeStyle)
+        if let roundness {
+            try container.encode(roundness, forKey: .roundness)
+        } else {
+            try container.encodeNil(forKey: .roundness)
+        }
+        try container.encode(roughness, forKey: .roughness)
+        try container.encode(opacity, forKey: .opacity)
+        try container.encode(width, forKey: .width)
+        try container.encode(height, forKey: .height)
+        try container.encode(angle, forKey: .angle)
+        try container.encode(seed, forKey: .seed)
+        try container.encode(version, forKey: .version)
+        try container.encode(versionNonce, forKey: .versionNonce)
+        if let index {
+            try container.encode(index, forKey: .index)
+        } else {
+            try container.encodeNil(forKey: .index)
+        }
+        try container.encode(isDeleted, forKey: .isDeleted)
+        try container.encode(groupIds, forKey: .groupIds)
+        if let frameId {
+            try container.encode(frameId, forKey: .frameId)
+        } else {
+            try container.encodeNil(forKey: .frameId)
+        }
+        if let boundElements {
+            try container.encode(boundElements, forKey: .boundElements)
+        } else {
+            try container.encodeNil(forKey: .boundElements)
+        }
+        try container.encodeIfPresent(updated, forKey: .updated)
+        if let link {
+            try container.encode(link, forKey: .link)
+        } else {
+            try container.encodeNil(forKey: .link)
+        }
+        try container.encodeIfPresent(locked, forKey: .locked)
+        try container.encodeIfPresent(customData, forKey: .customData)
+        try container.encode(type, forKey: .type)
+    }
     
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs.id == rhs.id &&

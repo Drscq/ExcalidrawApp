@@ -60,16 +60,16 @@ struct ShareView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.containerVerticalSizeClass) private var containerVerticalSizeClass
-
+    
     @Environment(\.dismiss) var dismiss
     @Environment(\.alertToast) var alertToast
     
     @EnvironmentObject var exportState: ExportState
-
+    
     
     var sharedFile: ExcalidrawFile
     var containerSizeClass: UserInterfaceSizeClass?
-
+    
     init(sharedFile: ExcalidrawFile, containerSizeClass: UserInterfaceSizeClass?) {
         self.sharedFile = sharedFile
         self.containerSizeClass = containerSizeClass
@@ -88,6 +88,9 @@ struct ShareView: View {
 #if os(iOS)
     @State private var exportedPDFURL: URL?
 #endif
+    @State private var isArchiveFilesExporterPresented = false
+    @State private var isArchiving = false
+    @State private var archiveResult: ArchiveResult?
     
     var body: some View {
         NavigationStack(path: $route) {
@@ -136,22 +139,43 @@ struct ShareView: View {
                         }
                     } else {
 #if os(macOS)
-                        SquareButton(title: .localizable(.exportSheetButtonArchive), icon: .archivebox) {
-                            Task {
-                                do {
-                                    try await archiveAllFiles(context: viewContext)
-                                } catch {
-                                    await MainActor.run {
-                                        alertToast(error)
-                                    }
-                                }
-                            }
+                        SquareButton(
+                            title: .localizable(.exportSheetButtonArchive),
+                            icon: .archivebox,
+                            loading: isArchiving
+                        ) {
+                            isArchiving = true
+                            isArchiveFilesExporterPresented = true
                         }
+                        .archiveFilesExporter(
+                            isPresented: $isArchiveFilesExporterPresented,
+                            context: viewContext,
+                            onComplete: { result in
+                                isArchiving = false
+                                switch result {
+                                    case .success(let archiveResult):
+                                        self.archiveResult = archiveResult
+                                    case .failure:
+                                        break
+                                }
+                            },
+                            onCancellation: {
+                                isArchiving = false
+                            }
+                        )
 #endif
                     }
                 }
-                Spacer()
-                Spacer()
+                
+                ZStack {
+                    Color.clear
+                    if let archiveResult = archiveResult, !archiveResult.failedFiles.isEmpty {
+                        Text("\(archiveResult.failedFiles.count) files failed to archive")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 40)
             }
             .navigationDestination(for: Route.self) { route in
                 ZStack {
@@ -226,10 +250,10 @@ struct ShareView: View {
 struct ShareViewLagacy: View {
     @Environment(\.managedObjectContext) var viewContext
     @Environment(\.dismiss) var dismiss
-
+    
     @Environment(\.alertToast) var alertToast
     @EnvironmentObject var exportState: ExportState
-
+    
     var sharedFile: ExcalidrawFile
     
     enum Route: Hashable {
@@ -270,7 +294,7 @@ struct ShareViewLagacy: View {
         VStack(spacing: 20) {
             Text(.localizable(.exportSheetHeadline))
                 .font(.largeTitle)
-
+            
             HStack(spacing: 14) {
                 SquareButton(title: .localizable(.exportSheetButtonImage), icon: .photo) {
                     route.append(Route.exportImage)
@@ -309,28 +333,6 @@ struct ShareViewLagacy: View {
 #if os(iOS)
                 .activitySheet(item: $exportedPDFURL)
 #endif
-
-//                ShareLink(
-//                    item: PDFFile(
-//                        name: sharedFile.name,
-//                        makeImage: {
-//                            do {
-//                                let imageData = try await exportState.exportCurrentFileToImage(
-//                                    type: .png,
-//                                    embedScene: false,
-//                                    withBackground: true
-//                                ).data
-//                                return UIImage(data: imageData) ?? UIImage(systemSymbol: .exclamationmarkTriangle)
-//                            } catch {
-//                                return UIImage(systemSymbol: .exclamationmarkTriangle)
-//                            }
-//                        }
-//                    ),
-//                    preview: SharePreview(sharedFile.name ?? "Excalidraw PDF")
-//                ) {
-//                    SquareButton.label(.localizable(.exportSheetButtonPDF), icon: .docRichtext)
-//                }
-//                .buttonStyle(ExportButtonStyle())
 #if os(macOS)
                 SquareButton(title: .localizable(.exportSheetButtonArchive), icon: .archivebox) {
                     Task {
@@ -345,7 +347,7 @@ struct ShareViewLagacy: View {
                 }
 #endif
             }
-
+            
         }
         .overlay(alignment: .topLeading) {
             Button {
@@ -357,7 +359,7 @@ struct ShareViewLagacy: View {
             .modernButtonStyle(style: .glass, size: .large, shape: .modernCircle)
         }
     }
-
+    
 }
 
 fileprivate struct SquareButton: View {
@@ -367,20 +369,27 @@ fileprivate struct SquareButton: View {
     var icon: SFSymbol
     var action: () async -> Void
     var priority: TaskPriority?
+    var loading: Bool
     
     init(
         title: LocalizedStringKey,
         icon: SFSymbol,
         priority: TaskPriority? = nil,
+        loading: Bool = false,
         action: @escaping () async -> Void
     ) {
         self.title = title
         self.icon = icon
         self.action = action
         self.priority = priority
+        self.loading = loading
     }
     
     @State private var isLoading = false
+    
+    private var showLoading: Bool {
+        isLoading || loading
+    }
     
     var body: some View {
         Button {
@@ -396,13 +405,13 @@ fileprivate struct SquareButton: View {
         } label: {
             Self
                 .label(title, icon: icon)
-                .opacity(isLoading ? 0 : 1)
+                .opacity(showLoading ? 0 : 1)
                 .overlay {
-                    if isLoading {
+                    if showLoading {
                         ProgressView()
                     }
                 }
-                .animation(.default, value: isLoading)
+                .animation(.default, value: showLoading)
         }
         .buttonStyle(ExportButtonStyle())
     }

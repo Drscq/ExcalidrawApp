@@ -188,7 +188,7 @@ struct ExcalidrawView: View {
                 handleFileChange(newFile)
             }
             .onChange(of: colorScheme) { newValue in
-                self.logger.info("color scheme changed: \(newValue)")
+                // self.logger.info("color scheme changed: \(newValue)")
                 // will trigger when ios move app to background
                 applyColorMode(colorScheme: newValue)
             }
@@ -198,15 +198,18 @@ struct ExcalidrawView: View {
             .onChange(of: loadingState) { state in
                 if state == .loaded {
                     applyAllSettings()
+                    if let file {
+                        handleFileChange(file)
+                    }
                 }
             }
-//#if os(iOS)
-//            .onChange(of: scenePhase) { scenePhase in
-//                if scenePhase == .active {
-//                    applyColorMode()
-//                }
-//            }
-//#endif
+#if os(iOS)
+            .onChange(of: scenePhase) { scenePhase in
+                if scenePhase == .active {
+                    applyColorMode(scenePhase: scenePhase)
+                }
+            }
+#endif
             .task {
                 await listenToLoadingState()
             }
@@ -297,9 +300,13 @@ struct ExcalidrawView: View {
         }
     }
     
-    private func applyColorMode(colorScheme scheme: ColorScheme? = nil) {
+    private func applyColorMode(
+        colorScheme scheme: ColorScheme? = nil,
+        scenePhase phase: ScenePhase? = nil
+    ) {
         let colorScheme = scheme ?? colorScheme
-        guard loadingState == .loaded else { return }
+        let scenePhase = phase ?? scenePhase
+        guard loadingState == .loaded, scenePhase == .active else { return }
 
         Task {
             do {

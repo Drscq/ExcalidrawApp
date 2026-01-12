@@ -98,6 +98,45 @@ struct ExcalidrawTextElement: ExcalidrawTextElementBase {
     var autoResize: Bool
     var lineHeight: Double?
 
+    enum CodingKeys: String, CodingKey {
+        case type
+        case id
+        case x
+        case y
+        case strokeColor
+        case backgroundColor
+        case fillStyle
+        case strokeWidth
+        case strokeStyle
+        case roundness
+        case roughness
+        case opacity
+        case width
+        case height
+        case angle
+        case seed
+        case version
+        case versionNonce
+        case index
+        case isDeleted
+        case groupIds
+        case frameId
+        case boundElements
+        case updated
+        case link
+        case locked
+        case customData
+        case fontSize
+        case fontFamily
+        case text
+        case textAlign
+        case verticalAlign
+        case containerId
+        case originalText
+        case autoResize
+        case lineHeight
+    }
+
     
     static func == (lhs: Self, rhs: Self) -> Bool {
         return lhs.type == rhs.type &&
@@ -172,5 +211,69 @@ struct ExcalidrawTextElement: ExcalidrawTextElementBase {
         self.originalText = try container.decodeIfPresent(String.self, forKey: .originalText)
         self.autoResize = try container.decodeIfPresent(Bool.self, forKey: .autoResize) ?? true
         self.lineHeight = try container.decodeIfPresent(Double.self, forKey: .lineHeight)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(id, forKey: .id)
+        try container.encode(x, forKey: .x)
+        try container.encode(y, forKey: .y)
+        try container.encode(strokeColor, forKey: .strokeColor)
+        try container.encode(backgroundColor, forKey: .backgroundColor)
+        try container.encode(fillStyle, forKey: .fillStyle)
+        try container.encode(strokeWidth, forKey: .strokeWidth)
+        try container.encode(strokeStyle, forKey: .strokeStyle)
+        if let roundness {
+            try container.encode(roundness, forKey: .roundness)
+        } else {
+            try container.encodeNil(forKey: .roundness)
+        }
+        try container.encode(roughness, forKey: .roughness)
+        try container.encode(opacity, forKey: .opacity)
+        try container.encode(width, forKey: .width)
+        try container.encode(height, forKey: .height)
+        try container.encode(angle, forKey: .angle)
+        try container.encode(seed, forKey: .seed)
+        try container.encode(version, forKey: .version)
+        try container.encode(versionNonce, forKey: .versionNonce)
+        if let index {
+            try container.encode(index, forKey: .index)
+        } else {
+            try container.encodeNil(forKey: .index)
+        }
+        try container.encode(isDeleted, forKey: .isDeleted)
+        try container.encode(groupIds, forKey: .groupIds)
+        if let frameId {
+            try container.encode(frameId, forKey: .frameId)
+        } else {
+            try container.encodeNil(forKey: .frameId)
+        }
+        if let boundElements {
+            try container.encode(boundElements, forKey: .boundElements)
+        } else {
+            try container.encodeNil(forKey: .boundElements)
+        }
+        try container.encodeIfPresent(updated, forKey: .updated)
+        if let link {
+            try container.encode(link, forKey: .link)
+        } else {
+            try container.encodeNil(forKey: .link)
+        }
+        try container.encodeIfPresent(locked, forKey: .locked)
+        try container.encodeIfPresent(customData, forKey: .customData)
+        try container.encode(fontSize, forKey: .fontSize)
+        try container.encode(fontFamily, forKey: .fontFamily)
+        try container.encode(text, forKey: .text)
+        try container.encode(textAlign, forKey: .textAlign)
+        try container.encode(verticalAlign, forKey: .verticalAlign)
+        if let containerId {
+            try container.encode(containerId, forKey: .containerId)
+        } else {
+            try container.encodeNil(forKey: .containerId)
+        }
+        try container.encodeIfPresent(originalText, forKey: .originalText)
+        try container.encode(autoResize, forKey: .autoResize)
+        try container.encodeIfPresent(lineHeight, forKey: .lineHeight)
     }
 }

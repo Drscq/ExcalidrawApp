@@ -80,21 +80,21 @@ struct LocalFolderMenuProvider: View {
     }
 
     private func createSubfolder(name: String) {
-        do {
-            try folder.withSecurityScopedURL { scopedURL in
-                let subfolderURL = scopedURL.appendingPathComponent(name, conformingTo: .directory)
-                let fileCoordinator = NSFileCoordinator()
-                fileCoordinator.coordinate(writingItemAt: subfolderURL, options: .forReplacing, error: nil) { url in
-                    do {
-                        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
-                    } catch {
-                        alertToast(error)
-                    }
+        Task {
+            do {
+                try await folder.withSecurityScopedURL { scopedURL async throws in
+                    let subfolderURL = scopedURL.appendingPathComponent(name, conformingTo: .directory)
+                    try await FileCoordinator.shared.coordinatedCreateDirectory(
+                        at: subfolderURL,
+                        withIntermediateDirectories: false
+                    )
+                    // LocalFolder creation will be in FSEventStream...
                 }
-                // LocalFolder creation will be in FSEventStream...
+            } catch {
+                await MainActor.run {
+                    alertToast(error)
+                }
             }
-        } catch {
-            alertToast(error)
         }
     }
     
@@ -270,25 +270,15 @@ struct LocalFolderMenuItems: View {
                 } else {
                     fileState.currentActiveGroup = nil
                 }
-                DispatchQueue.main.async {
+                Task {
                     do {
-                        try folder.withSecurityScopedURL { scopedURL in
-                            let fileCoordinator = NSFileCoordinator()
-                            fileCoordinator.coordinate(
-                                writingItemAt: scopedURL,
-                                options: .forDeleting,
-                                error: nil
-                            ) { url in
-                                do {
-                                    try FileManager.default.trashItem(at: url, resultingItemURL: nil)
-                                } catch {
-                                    alertToast(error)
-                                }
-                            }
+                        try await folder.withSecurityScopedURL { scopedURL async throws in
+                            _ = try await FileCoordinator.shared.coordinatedTrash(url: scopedURL)
                         }
-                        
                     } catch {
-                        alertToast(error)
+                        await MainActor.run {
+                            alertToast(error)
+                        }
                     }
                 }
             } label: {

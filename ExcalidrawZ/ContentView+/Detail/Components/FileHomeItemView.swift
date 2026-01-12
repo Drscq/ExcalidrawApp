@@ -261,7 +261,7 @@ private struct FileHomeItemContentView: View {
         SwiftUI.Group {
             if #available(macOS 13.0, *) {
                 layout {
-                    content()
+                     content()
                 }
                 .clipShape(
                     style == .file
@@ -404,11 +404,12 @@ private struct FileHomeItemContentView: View {
         }
         .padding(.horizontal, containerHorizontalSizeClass == .regular ? 8 : 6)
         .padding(.vertical, containerHorizontalSizeClass == .regular ? 8 : 6)
-        .background {
-            if style == .card {
-                Rectangle().fill(.ultraThinMaterial)
-            }
-        }
+        // Costing too much performance
+//        .background {
+//            if style == .card {
+//                Rectangle().fill(.ultraThinMaterial)
+//            }
+//        }
     }
     
     @ViewBuilder
