@@ -215,6 +215,9 @@ struct GroupsView: View {
                 isBeingDropped: $isBeingDropped
             )
             .modifier(GroupRowDragModifier(group: group))
+            .simultaneousGesture(TapGesture(count: 2).onEnded {
+                fileState.expandToGroup(group.objectID)
+            })
         }
         .extraLabelStyle { content in
             content
