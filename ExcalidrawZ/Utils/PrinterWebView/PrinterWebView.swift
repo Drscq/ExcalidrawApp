@@ -10,6 +10,7 @@ import WebKit
 import SwiftUIIntrospect
 import Logging
 
+#if DEBUG
 class PrinterWebView: WKWebView {
     init(filename: String) {
         fatalError("init(coder:) has not been implemented")
