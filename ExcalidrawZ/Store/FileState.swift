@@ -256,7 +256,10 @@ final class FileState: ObservableObject {
                     }
                 }
                 
-            case .temporaryFile:
+            case .temporaryFile(let url):
+                if !temporaryFiles.contains(where: {$0 == url}) {
+                    temporaryFiles.append(url)
+                }
                 currentActiveGroup = .temporary
             case .collaborationFile(let room):
                 let store = Store.shared

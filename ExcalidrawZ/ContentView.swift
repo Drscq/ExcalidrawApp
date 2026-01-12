@@ -125,8 +125,9 @@ struct ContentView: View {
             fileState.temporaryFiles.append(contentsOf: urls)
             fileState.temporaryFiles = Array(Set(fileState.temporaryFiles))
             if fileState.currentActiveFile == nil || fileState.currentActiveGroup != .temporary {
-                fileState.currentActiveGroup = .temporary
-                fileState.setActiveFile(.localFile(fileState.temporaryFiles.first!))
+                fileState.setActiveFile(
+                    .localFile(fileState.temporaryFiles.first!)
+                )
             }
         }
     }

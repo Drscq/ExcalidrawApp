@@ -198,6 +198,9 @@ struct ExcalidrawView: View {
             .onChange(of: loadingState) { state in
                 if state == .loaded {
                     applyAllSettings()
+                    if let file {
+                        handleFileChange(file)
+                    }
                 }
             }
 #if os(iOS)

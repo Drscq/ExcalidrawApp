@@ -1,3 +1,19 @@
+## 1.7.1
+
+#### Optinizations
+
+- Reduced App Size
+  - Optimized code and dependencies to reduce the app size by about 30%.
+- Excalidraw Core Update — Improved Dark Mode Support
+
+- Improved the Drawing Settings to support additional configuration options.
+- Improve PDF export with support for orientation, paper size, and other settings.
+
+#### Bug fixed
+
+- Fixed an issue where the archive operation failed under certain conditions.
+- Fix issue where the "Create Drawing" button wasn't displayed on iOS.
+
 ## 1.7.0
 
 #### Features
