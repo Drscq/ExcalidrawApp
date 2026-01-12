@@ -57,7 +57,7 @@ struct LagacyPointBinding: Codable, Hashable {
 enum PointBinding: Codable, Hashable {
     case fixed(FixedPointBinding)
     case lagacy(LagacyPointBinding)
-    
+
     init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let pointBinding = try? container.decode(FixedPointBinding.self) {
@@ -67,7 +67,15 @@ enum PointBinding: Codable, Hashable {
         }
     }
 }
- 
+
+struct FixedSegment: Codable, Hashable {
+    typealias Index = String
+
+    var start: Point
+    var end: Point
+    var index: Index
+}
+
 enum Arrowhead: String, Codable {
     case arrow
     case bar
@@ -308,6 +316,11 @@ struct ExcalidrawArrowElement: ExcalidrawLinearElementBase {
     var endArrowhead: Arrowhead?
     var elbowed: Bool
 
+    // Elbow arrow specific fields
+    var fixedSegments: [FixedSegment]?
+    var startIsSpecial: Bool?
+    var endIsSpecial: Bool?
+
     enum CodingKeys: String, CodingKey {
         case id
         case x
@@ -343,6 +356,9 @@ struct ExcalidrawArrowElement: ExcalidrawLinearElementBase {
         case startArrowhead
         case endArrowhead
         case elbowed
+        case fixedSegments
+        case startIsSpecial
+        case endIsSpecial
     }
     
     init(from decoder: any Decoder) throws {
@@ -381,6 +397,9 @@ struct ExcalidrawArrowElement: ExcalidrawLinearElementBase {
         self.startArrowhead = try container.decodeIfPresent(Arrowhead.self, forKey: .startArrowhead)
         self.endArrowhead = try container.decodeIfPresent(Arrowhead.self, forKey: .endArrowhead)
         self.elbowed = try container.decodeIfPresent(Bool.self, forKey: .elbowed) ?? false
+        self.fixedSegments = try container.decodeIfPresent([FixedSegment].self, forKey: .fixedSegments)
+        self.startIsSpecial = try container.decodeIfPresent(Bool.self, forKey: .startIsSpecial)
+        self.endIsSpecial = try container.decodeIfPresent(Bool.self, forKey: .endIsSpecial)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -433,7 +452,11 @@ struct ExcalidrawArrowElement: ExcalidrawLinearElementBase {
         try container.encodeIfPresent(customData, forKey: .customData)
         try container.encode(type, forKey: .type)
         try container.encode(points, forKey: .points)
-        try container.encodeIfPresent(lastCommittedPoint, forKey: .lastCommittedPoint)
+        if let lastCommittedPoint {
+            try container.encode(lastCommittedPoint, forKey: .lastCommittedPoint)
+        } else {
+            try container.encodeNil(forKey: .lastCommittedPoint)
+        }
         if let startBinding {
             try container.encode(startBinding, forKey: .startBinding)
         } else {
@@ -455,6 +478,21 @@ struct ExcalidrawArrowElement: ExcalidrawLinearElementBase {
             try container.encodeNil(forKey: .endArrowhead)
         }
         try container.encode(elbowed, forKey: .elbowed)
+        if let fixedSegments {
+            try container.encode(fixedSegments, forKey: .fixedSegments)
+        } else {
+            try container.encodeNil(forKey: .fixedSegments)
+        }
+        if let startIsSpecial {
+            try container.encode(startIsSpecial, forKey: .startIsSpecial)
+        } else {
+            try container.encodeNil(forKey: .startIsSpecial)
+        }
+        if let endIsSpecial {
+            try container.encode(endIsSpecial, forKey: .endIsSpecial)
+        } else {
+            try container.encodeNil(forKey: .endIsSpecial)
+        }
     }
     
     /// ignore `version`, `versionNounce`, `updated`
@@ -487,6 +525,10 @@ struct ExcalidrawArrowElement: ExcalidrawLinearElementBase {
             lhs.startBinding == rhs.startBinding &&
             lhs.endBinding == rhs.endBinding &&
             lhs.startArrowhead == rhs.startArrowhead &&
-            lhs.endArrowhead == rhs.endArrowhead
+            lhs.endArrowhead == rhs.endArrowhead &&
+            lhs.elbowed == rhs.elbowed &&
+            lhs.fixedSegments == rhs.fixedSegments &&
+            lhs.startIsSpecial == rhs.startIsSpecial &&
+            lhs.endIsSpecial == rhs.endIsSpecial
     }
 }

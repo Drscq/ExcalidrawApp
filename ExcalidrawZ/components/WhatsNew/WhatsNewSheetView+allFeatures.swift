@@ -10,36 +10,18 @@ import SwiftUI
 extension WhatsNewView {
     @MainActor @ViewBuilder
     func featuresContent() -> some View {
-#if os(iOS)
         WhatsNewFeatureRow(
-            title: .localizable(.whatsNewRedesignUITitle),
-            description: .localizable(.whatsNewRedesignUIDescription),
-            icon: Image(systemSymbol: .macwindow)
-        )
-#endif
+            title: .localizable(.whatsNewUpdateExcalidrawCoreTitle),
+            description: .localizable(.whatsNewBetterDarkModeDescription),
+        ) {
+            ExcalidrawIconView()
+                .frame(height: 36)
+        }
         
         WhatsNewFeatureRow(
-            title: .localizable(.whatsNewMoveContentToICloudDriveTitle),
-            description: .localizable(.whatsNewMoveContentToICloudDriveDescription),
-            icon: Image(systemSymbol: .externaldriveConnectedToLineBelow)
-        )
-        
-        WhatsNewFeatureRow(
-            title: .localizable(.whatsNewImportPDFTitle),
-            description: .localizable(.whatsNewImportPDFDescription),
-            icon: {
-                if #available(macOS 15.0, iOS 18.0, *) {
-                    Image(systemSymbol: .richtextPage)
-                } else {
-                    Image(systemSymbol: .docRichtext)
-                }
-            }()
-        )
-        
-         WhatsNewFeatureRow(
-            title: .localizable(.whatsNewCustomDrawingSettingsTitle),
-            description: .localizable(.whatsNewCustomDrawingSettingsDescription),
-            icon: Image(systemSymbol: .gearshape2)
+            title: .localizable(.whatsNewReducedAppSizeTitle),
+            description: .localizable(.whatsNewReducedAppSizeDescription),
+            icon: Image(systemSymbol: .externaldrive)
         )
     }
     
@@ -71,6 +53,41 @@ extension WhatsNewView {
                         featuresContent()
                     }
                     
+                    // MARK: - v1.7.0
+                    WhatsNewVersionSection(version: "v1.7.0") {
+#if os(iOS)
+                        WhatsNewFeatureRow(
+                            title: .localizable(.whatsNewRedesignUITitle),
+                            description: .localizable(.whatsNewRedesignUIDescription),
+                            icon: Image(systemSymbol: .macwindow)
+                        )
+#endif
+                        
+                        WhatsNewFeatureRow(
+                            title: .localizable(.whatsNewMoveContentToICloudDriveTitle),
+                            description: .localizable(.whatsNewMoveContentToICloudDriveDescription),
+                            icon: Image(systemSymbol: .externaldriveConnectedToLineBelow)
+                        )
+                        
+                        WhatsNewFeatureRow(
+                            title: .localizable(.whatsNewImportPDFTitle),
+                            description: .localizable(.whatsNewImportPDFDescription),
+                            icon: {
+                                if #available(macOS 15.0, iOS 18.0, *) {
+                                    Image(systemSymbol: .richtextPage)
+                                } else {
+                                    Image(systemSymbol: .docRichtext)
+                                }
+                            }()
+                        )
+                        
+                        WhatsNewFeatureRow(
+                            title: .localizable(.whatsNewCustomDrawingSettingsTitle),
+                            description: .localizable(.whatsNewCustomDrawingSettingsDescription),
+                            icon: Image(systemSymbol: .gearshape2)
+                        )
+                    }
+                    
                     // MARK: - v1.6.1
                     WhatsNewVersionSection(version: "v1.6.1") {
                         WhatsNewFeatureRow(
@@ -78,7 +95,7 @@ extension WhatsNewView {
                             description: .localizable(.whatsNewUpdateExcalidrawCoreDescription)
                         ) {
                             ExcalidrawIconView()
-                                .frame(height: 30)
+                                .frame(height: 36)
                         }
                     }
 

@@ -147,8 +147,14 @@ final class AppPreference: ObservableObject {
 
     var customDrawingSettings: UserDrawingSettings {
         get {
-            (try? JSONDecoder().decode(UserDrawingSettings.self, from: customDrawingSettingsData))
-                ?? UserDrawingSettings()
+            do {
+                let settings = try JSONDecoder().decode(UserDrawingSettings.self, from: customDrawingSettingsData)
+                return settings
+            } catch {
+                print("Decode customDrawingSettings error", error)
+                return UserDrawingSettings()
+            }
+            
         }
         set {
             customDrawingSettingsData = (try? JSONEncoder().encode(newValue)) ?? Data()
