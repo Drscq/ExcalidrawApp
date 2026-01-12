@@ -606,7 +606,7 @@ actor SyncCoordinator {
             do {
                 try await self.performDiffScan(allowRetry: allowRetry)
             } catch {
-                await self.logger.error("DiffScan retry failed: \(error.localizedDescription)")
+                self.logger.error("DiffScan retry failed: \(error.localizedDescription)")
             }
         }
     }
