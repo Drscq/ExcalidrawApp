@@ -1,6 +1,6 @@
 ## 1.7.1
 
-#### Optinizations
+#### Optimizations
 
 - Reduced App Size
   - Optimized code and dependencies to reduce the app size by about 30%.
