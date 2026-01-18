@@ -90,7 +90,7 @@ final class ExportState: ObservableObject {
         return try await exportExcalidrawElementsToImage(
             elements: file.elements,
             type: type,
-            name: file.name ?? "Untitled",
+            name: file.name ?? String(localizable: .generalUntitled),
             embedScene: embedScene,
             withBackground: withBackground,
             colorScheme: colorScheme
