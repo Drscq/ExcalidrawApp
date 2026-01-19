@@ -69,11 +69,63 @@ enum PointBinding: Codable, Hashable {
 }
 
 struct FixedSegment: Codable, Hashable {
-    typealias Index = String
+    typealias Index = Int
 
     var start: Point
     var end: Point
     var index: Index
+
+    enum CodingKeys: String, CodingKey {
+        case start
+        case end
+        case index
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.start = try Self.decodePoint(from: container, forKey: .start)
+        self.end = try Self.decodePoint(from: container, forKey: .end)
+        self.index = try Self.decodeIndex(from: container)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(index, forKey: .index)
+        try container.encode([Double(start.x), Double(start.y)], forKey: .start)
+        try container.encode([Double(end.x), Double(end.y)], forKey: .end)
+    }
+
+    private static func decodePoint(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> Point {
+        if let array = try? container.decode([Double].self, forKey: key) {
+            guard array.count >= 2 else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: key,
+                    in: container,
+                    debugDescription: "Point array must have at least 2 items."
+                )
+            }
+            return CGPoint(x: array[0], y: array[1])
+        }
+        return try container.decode(Point.self, forKey: key)
+    }
+
+    private static func decodeIndex(from container: KeyedDecodingContainer<CodingKeys>) throws -> Index {
+        if let index = try? container.decode(Int.self, forKey: .index) {
+            return index
+        }
+        let stringValue = try container.decode(String.self, forKey: .index)
+        if let index = Int(stringValue) {
+            return index
+        }
+        throw DecodingError.dataCorruptedError(
+            forKey: .index,
+            in: container,
+            debugDescription: "Index must be an Int or a numeric string."
+        )
+    }
 }
 
 enum Arrowhead: String, Codable {

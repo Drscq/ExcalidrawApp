@@ -388,5 +388,8 @@ struct ExcalidrawContainerWrapper: View {
 
         // Apply local edits
         localFileBinding.wrappedValue = file
+
+        // Keep in-memory file in sync so exports read the latest elements.
+        excalidrawFile = file
     }
 }

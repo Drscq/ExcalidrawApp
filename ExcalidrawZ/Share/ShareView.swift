@@ -12,7 +12,6 @@ import ChocofordUI
 import SwiftyAlert
 import SFSafeSymbols
 
-
 struct ShareFileModifier: ViewModifier {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -53,7 +52,6 @@ struct ShareFileModifier: ViewModifier {
         
     }
 }
-
 
 @available(macOS 13.0, iOS 16.0, *)
 struct ShareView: View {
@@ -245,7 +243,6 @@ struct ShareView: View {
         .controlSize(.large)
     }
 }
-
 
 struct ShareViewLagacy: View {
     @Environment(\.managedObjectContext) var viewContext

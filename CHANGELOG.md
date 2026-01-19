@@ -1,3 +1,12 @@
+## 1.7.2
+
+#### Bug fixed
+
+- Fix bug causing exported images to not show the latest content.
+
+- Fix incompatibility issues with certain data formats.
+- Fix issue preventing the stats panel from opening (Option + /)
+
 ## 1.7.1
 
 #### Optimizations

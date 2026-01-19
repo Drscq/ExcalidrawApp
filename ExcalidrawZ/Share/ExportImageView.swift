@@ -24,13 +24,19 @@ struct ExportImageView: View {
     @EnvironmentObject var exportState: ExportState
     
     var elements: [ExcalidrawElement]
+    private let baseFileName: String
     
     private var _dismissAction: (() -> Void)?
     init(
         file: ExcalidrawFile,
         dismissAction: (() -> Void)? = nil
     ) {
+        let baseName = (file.name?.isEmpty == false)
+        ? (file.name ?? String(localizable: .generalUntitled))
+        : String(localizable: .generalUntitled)
         self.elements = file.elements
+        self.baseFileName = baseName
+        self._fileName = State(initialValue: baseName)
         if let dismissAction {
             self._dismissAction = dismissAction
         }
@@ -49,7 +55,7 @@ struct ExportImageView: View {
     @State private var loadingImage: Bool = false
     @State private var showFileExporter = false
     @State private var showShare: Bool = false
-    @State private var fileName: String = ""
+    @State private var fileName: String
     @State private var copied: Bool = false
     @State private var hasError: Bool = false
 
@@ -446,6 +452,7 @@ struct ExportImageView: View {
     }
     
     private func exportImageData(initial: Bool = false) {
+        let exportName = self.fileName.isEmpty ? self.baseFileName : self.fileName
         Task.detached {
             do {
                 if initial {
@@ -453,8 +460,10 @@ struct ExportImageView: View {
                         self.image = nil
                         self.exportedImageData = nil
                     }
-                    let imageData = try await exportState.exportCurrentFileToImage(
+                    let imageData = try await exportState.exportExcalidrawElementsToImage(
+                        elements: self.elements,
                         type: .png,
+                        name: exportName,
                         embedScene: false,
                         withBackground: self.exportWithBackground,
                         colorScheme: self.exportColorScheme
@@ -466,8 +475,10 @@ struct ExportImageView: View {
                         self.fileName = imageData.name
                     }
                 } else {
-                    let imageData = try await exportState.exportCurrentFileToImage(
+                    let imageData = try await exportState.exportExcalidrawElementsToImage(
+                        elements: self.elements,
                         type: self.imageType == 0 ? .png : .svg,
+                        name: exportName,
                         embedScene: self.keepEditable,
                         withBackground: self.exportWithBackground,
                         colorScheme: self.exportColorScheme
