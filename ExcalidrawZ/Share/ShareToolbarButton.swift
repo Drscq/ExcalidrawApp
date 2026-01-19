@@ -37,6 +37,10 @@ struct ShareToolbarButton: View {
 #elseif canImport(UIKit)
     @State private var window: UIWindow?
 #endif
+
+#if os(macOS)
+    @State private var isSharing = false
+#endif
     
     
 #if os(iOS)
@@ -45,10 +49,19 @@ struct ShareToolbarButton: View {
     
     var body: some View {
 #if os(macOS)
-        AsyncButton {
-            await performShareFile()
+        Button {
+            Task { @MainActor in
+                await performShareFileWithLoading()
+            }
         } label: {
             Label(.localizable(.export), systemSymbol: .squareAndArrowUp)
+                .opacity(isSharing ? 0 : 1)
+                .overlay {
+                    if isSharing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                }
         }
         .help(String(localizable: .export))
         .keyboardShortcut("s", modifiers: [.command, .shift])
@@ -59,13 +72,14 @@ struct ShareToolbarButton: View {
                 }
                 return false
             }() ||
-            fileState.currentActiveFile == nil
+            fileState.currentActiveFile == nil ||
+            isSharing
         )
         .bindWindow($window)
         .onReceive(NotificationCenter.default.publisher(for: .toggleShare)) { notification in
             guard window?.isKeyWindow == true else { return }
-            Task {
-                await performShareFile()
+            Task { @MainActor in
+                await performShareFileWithLoading()
             }
         }
 #else
@@ -147,5 +161,14 @@ struct ShareToolbarButton: View {
             alertToast(error)
         }
     }
-}
 
+#if os(macOS)
+    @MainActor
+    private func performShareFileWithLoading() async {
+        guard !isSharing else { return }
+        isSharing = true
+        defer { isSharing = false }
+        await performShareFile()
+    }
+#endif
+}
