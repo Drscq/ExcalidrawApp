@@ -142,7 +142,9 @@ extension ExcalidrawCore {
         }
         
         let requestType = request.type ?? "diagram-to-code"
-        logger.info("AI request intercepted for NVIDIA bridge (\(requestType)): \(request.id)")
+        let requestURL = request.url ?? "(missing-url)"
+        let bodySize = request.body?.utf8.count ?? 0
+        logger.info("AI request intercepted for NVIDIA bridge (\(requestType)): id=\(request.id) url=\(requestURL) bodyBytes=\(bodySize)")
         
         Task { [weak self] in
             guard let self else { return }
@@ -180,8 +182,10 @@ extension ExcalidrawCore {
     
     private func handleTextToDiagramRequest(_ request: NvidiaMagicFrameBridgeRequest) async {
         do {
-            let mermaidCode = try await self.generateTextToDiagramMermaid(requestBody: request.body)
             let isStreaming = request.url?.contains("chat-streaming") == true
+            logger.info("Handling text-to-diagram request: id=\(request.id) mode=\(isStreaming ? "streaming" : "generate")")
+            let mermaidCode = try await self.generateTextToDiagramMermaid(requestBody: request.body)
+            logger.info("Text-to-diagram generation finished: id=\(request.id) mermaidChars=\(mermaidCode.count)")
             if isStreaming {
                 let sseBody = Self.buildSSEResponse(content: mermaidCode)
                 await self.resolveNvidiaMagicFrameBridgeRequest(
@@ -369,9 +373,11 @@ extension ExcalidrawCore {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NvidiaMagicFrameError.invalidResponse
         }
+        logger.info("NVIDIA Magic Frame HTTP response: status=\(httpResponse.statusCode) bytes=\(data.count)")
         
         guard (200...299).contains(httpResponse.statusCode) else {
             let message = Self.extractServerMessage(data: data)
+            logger.error("NVIDIA Magic Frame error payload: \(Self.truncatedForLog(message))")
             throw NvidiaMagicFrameError.serverError(status: httpResponse.statusCode, message: message)
         }
         
@@ -414,12 +420,16 @@ Wireframe text extracted from frame elements:
               let data = requestBody.data(using: .utf8) else {
             throw NvidiaMagicFrameError.invalidRequest
         }
+        logger.info("Decoding text-to-diagram request body: bytes=\(data.count)")
         
         if Secrets.shared.nvidiaAPIKey.isEmpty {
             throw NvidiaMagicFrameError.missingAPIKey
         }
         
         let requestPayload = try JSONDecoder().decode(TextToDiagramRequest.self, from: data)
+        let promptLength = requestPayload.prompt?.count ?? 0
+        let messagesCount = requestPayload.messages?.count ?? 0
+        logger.info("Parsed text-to-diagram payload: promptChars=\(promptLength) messages=\(messagesCount)")
         
         // Build messages for NVIDIA API
         var nvidiaMessages: [[String: Any]] = [
@@ -480,9 +490,11 @@ Wireframe text extracted from frame elements:
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NvidiaMagicFrameError.invalidResponse
         }
+        logger.info("NVIDIA Text-to-Diagram HTTP response: status=\(httpResponse.statusCode) bytes=\(responseData.count)")
         
         guard (200...299).contains(httpResponse.statusCode) else {
             let message = Self.extractServerMessage(data: responseData)
+            logger.error("NVIDIA Text-to-Diagram error payload: \(Self.truncatedForLog(message))")
             throw NvidiaMagicFrameError.serverError(status: httpResponse.statusCode, message: message)
         }
         
@@ -646,6 +658,12 @@ Wireframe text extracted from frame elements:
         }
         
         return "Unknown server error."
+    }
+    
+    fileprivate static func truncatedForLog(_ value: String, limit: Int = 400) -> String {
+        guard value.count > limit else { return value }
+        let end = value.index(value.startIndex, offsetBy: limit)
+        return String(value[..<end]) + "...(truncated)"
     }
     
     fileprivate static func jsonString(_ object: Any) throws -> String {

@@ -1,3 +1,17 @@
+
+
+## 1.7.3
+
+#### Bug fixed
+
+- Fix infinite loading when creating a new drawing (restore required network entitlements for local webview).
+- Fix AI Text-to-diagram request failing by routing the streaming endpoint through NVIDIA.
+- Improve AI bridge handling for both diagram-to-code and text-to-diagram.
+
+#### Optimizations
+
+- Add NVIDIA text-to-diagram streaming support with Mermaid output handling.
+
 ## 1.7.2
 
 #### Bug fixed
