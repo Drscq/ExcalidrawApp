@@ -25,6 +25,11 @@ extension ExcalidrawCore: WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
+        if message.name == Self.nvidiaMagicFrameBridgeName {
+            self.handleNvidiaMagicFrameBridgeMessage(message)
+            return
+        }
+        
         do {
             let data = try JSONSerialization.data(withJSONObject: message.body)
             let message = try JSONDecoder().decode(ExcalidrawZMessage.self, from: data)

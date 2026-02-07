@@ -126,6 +126,14 @@ class ExcalidrawCore: NSObject, ObservableObject {
         
         let userContentController = WKUserContentController()
         userContentController.add(self, name: "excalidrawZ")
+        userContentController.add(self, name: Self.nvidiaMagicFrameBridgeName)
+        userContentController.addUserScript(
+            WKUserScript(
+                source: Self.nvidiaMagicFrameFetchProxyScript,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
         
         do {
             let consoleHandlerScript = try WKUserScript(
@@ -694,5 +702,4 @@ window.excalidrawZHelper.exportElementsToBlob(
         try await webView.evaluateJavaScript("document.body.style = '\(enabled ? "" : "pointer-events: none;")'; 0;")
     }
 }
-
 

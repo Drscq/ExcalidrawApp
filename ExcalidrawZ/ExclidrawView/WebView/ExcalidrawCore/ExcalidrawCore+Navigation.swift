@@ -67,6 +67,12 @@ extension ExcalidrawCore: WKNavigationDelegate {
                 }
             }
         }
+        
+        // Fallback: some builds may miss the onload bridge message. If helper is ready,
+        // mark document loaded to avoid permanent loading state.
+        Task { [weak self] in
+            await self?.markDocumentLoadedIfBridgeReady()
+        }
     }
         
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
@@ -98,5 +104,32 @@ extension ExcalidrawCore: WKNavigationDelegate {
         // logger.error("[ExcalidrawCore] didFailProvisionalNavigation: \(error)")
         self.parent?.loadingState = .error(error)
         self.publishError(error)
+    }
+    
+    private func markDocumentLoadedIfBridgeReady() async {
+        for _ in 0..<30 {
+            let alreadyLoaded = await MainActor.run {
+                self.isDocumentLoaded
+            }
+            if alreadyLoaded {
+                return
+            }
+            
+            let isBridgeReady = (try? await self.webView.evaluateJavaScript(
+                "typeof window.excalidrawZHelper !== 'undefined' && typeof window.excalidrawZHelper.loadFileBuffer === 'function';"
+            ) as? Bool) == true
+            
+            if isBridgeReady {
+                await MainActor.run {
+                    if !self.isDocumentLoaded {
+                        self.logger.warning("onload bridge message missing, marking document loaded via helper readiness fallback.")
+                        self.isDocumentLoaded = true
+                    }
+                }
+                return
+            }
+            
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
     }
 }

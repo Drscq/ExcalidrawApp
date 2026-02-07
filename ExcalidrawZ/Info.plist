@@ -91,9 +91,7 @@
 	<key>SUPublicEDKey</key>
 	<string>GVyyXynnnx8V+9I0OUy/rNRJen+ZFzRd6YhJYuaInbw=</string>
 	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<array/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

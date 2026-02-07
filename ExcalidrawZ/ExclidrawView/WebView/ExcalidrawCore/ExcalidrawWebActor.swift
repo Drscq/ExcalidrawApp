@@ -11,6 +11,12 @@ import Logging
 actor ExcalidrawWebActor {
     let logger = Logger(label: "ExcalidrawWebActor")
     
+    private struct HelperNotReadyError: LocalizedError {
+        var errorDescription: String? {
+            "Excalidraw web helper is not ready yet."
+        }
+    }
+    
     var excalidrawCoordinator: ExcalidrawCore
     
     init(coordinator: ExcalidrawCore) {
@@ -23,17 +29,38 @@ actor ExcalidrawWebActor {
     func loadFile(id: String, data: Data, force: Bool = false) async throws {
         let webView = webView
         guard loadedFileID != id || force else { return }
-        self.loadedFileID = id
         
         self.logger.info(
             "Load file<\(String(describing: id)), \(data.count.formatted(.byteCount(style: .file)))>, force: \(force), Thread: \(Thread().description)"
         )
         
+        let isHelperReady = try await waitForHelperReady(maxAttempts: 60, delayNanoseconds: 100_000_000)
+        guard isHelperReady else {
+            throw HelperNotReadyError()
+        }
+        
         var buffer = [UInt8].init(repeating: 0, count: data.count)
         data.copyBytes(to: &buffer, count: data.count)
         let buf = buffer
-        await MainActor.run {
-            webView.evaluateJavaScript("window.excalidrawZHelper.loadFileBuffer(\(buf), '\(id)'); 0;")
+        _ = try await webView.evaluateJavaScript("window.excalidrawZHelper.loadFileBuffer(\(buf), '\(id)'); 0;")
+        self.loadedFileID = id
+    }
+    
+    private func waitForHelperReady(
+        maxAttempts: Int,
+        delayNanoseconds: UInt64
+    ) async throws -> Bool {
+        for _ in 0..<maxAttempts {
+            let isReady = (try? await webView.evaluateJavaScript(
+                "typeof window.excalidrawZHelper !== 'undefined' && typeof window.excalidrawZHelper.loadFileBuffer === 'function';"
+            ) as? Bool) == true
+            
+            if isReady {
+                return true
+            }
+            
+            try await Task.sleep(nanoseconds: delayNanoseconds)
         }
+        return false
     }
 }
