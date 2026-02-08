@@ -11,9 +11,15 @@ import CoreData
 
 extension ExcalidrawCore: WKNavigationDelegate {
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences) async -> (WKNavigationActionPolicy, WKWebpagePreferences) {
+        if navigationAction.request.url?.scheme?.lowercased() == "blob" {
+            return (.download, preferences)
+        }
         return (.allow, preferences)
     }
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction) async -> WKNavigationActionPolicy {
+        if navigationAction.request.url?.scheme?.lowercased() == "blob" {
+            return .download
+        }
         return .allow
     }
     
@@ -83,6 +89,10 @@ extension ExcalidrawCore: WKNavigationDelegate {
     }
     
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if webView.url?.scheme?.lowercased() == "blob" {
+            logger.debug("Ignore didCommit for blob download navigation")
+            return
+        }
         logger.info("didCommit...")
         self.parent?.loadingState = .loading
         DispatchQueue.main.async {
@@ -92,6 +102,10 @@ extension ExcalidrawCore: WKNavigationDelegate {
     }
     
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        if webView.url?.scheme?.lowercased() == "blob" {
+            logger.debug("Ignore didStartProvisionalNavigation for blob download navigation")
+            return
+        }
         logger.info("didStartProvisionalNavigation...")
         self.parent?.loadingState = .loading
         DispatchQueue.main.async {

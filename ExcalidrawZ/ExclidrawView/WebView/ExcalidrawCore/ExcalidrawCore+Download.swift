@@ -7,6 +7,11 @@
 
 import Foundation
 import WebKit
+import UniformTypeIdentifiers
+
+#if os(macOS)
+import AppKit
+#endif
 
 
 extension ExcalidrawCore: WKDownloadDelegate {
@@ -17,6 +22,13 @@ extension ExcalidrawCore: WKDownloadDelegate {
                 
             case .some("png"):
                 return onExportPNG(download, decideDestinationUsing: response, suggestedFilename: suggestedFilename)
+
+            case .some("webm"):
+#if os(macOS)
+                return await onExportWebM(download, decideDestinationUsing: response, suggestedFilename: suggestedFilename)
+#else
+                return nil
+#endif
                 
             default:
                 return nil
@@ -30,6 +42,36 @@ extension ExcalidrawCore: WKDownloadDelegate {
         logger.info("download did finished: \(url)")
         self.parent?.exportState.finishExport(download: download)
         downloads.removeValue(forKey: request)
+
+        Task { @MainActor in
+            // Recovery guard: blob downloads should not leave the main board in a loading state.
+            let isBridgeReady = ((try? await self.webView.evaluateJavaScript(
+                "typeof window.excalidrawZHelper !== 'undefined' && typeof window.excalidrawZHelper.loadFileBuffer === 'function';"
+            ) as? Bool) == true)
+            if isBridgeReady {
+                self.isNavigating = false
+                self.isDocumentLoaded = true
+                if self.parent?.loadingState == .loading {
+                    self.parent?.loadingState = .loaded
+                }
+            }
+        }
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: any Error, resumeData: Data?) {
+        logger.warning("download failed: \(error.localizedDescription)")
+        Task { @MainActor in
+            let isBridgeReady = ((try? await self.webView.evaluateJavaScript(
+                "typeof window.excalidrawZHelper !== 'undefined' && typeof window.excalidrawZHelper.loadFileBuffer === 'function';"
+            ) as? Bool) == true)
+            if isBridgeReady {
+                self.isNavigating = false
+                self.isDocumentLoaded = true
+                if self.parent?.loadingState == .loading {
+                    self.parent?.loadingState = .loaded
+                }
+            }
+        }
     }
     
     func onExportPNG(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String) -> URL? {
@@ -55,4 +97,29 @@ extension ExcalidrawCore: WKDownloadDelegate {
             return nil
         }
     }
+
+#if os(macOS)
+    @MainActor
+    func onExportWebM(_ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String) async -> URL? {
+        self.logger.info("on export webm.")
+
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = suggestedFilename
+        if let webmType = UTType(filenameExtension: "webm") {
+            panel.allowedContentTypes = [webmType]
+        }
+
+        let result = panel.runModal()
+        guard result == .OK, let selectedURL = panel.url else {
+            return nil
+        }
+
+        if let request = download.originalRequest {
+            self.downloads[request] = selectedURL
+        }
+        self.parent?.exportState.beginExport(url: selectedURL, download: download)
+        return selectedURL
+    }
+#endif
 }
