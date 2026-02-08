@@ -134,6 +134,13 @@ class ExcalidrawCore: NSObject, ObservableObject {
                 forMainFrameOnly: true
             )
         )
+        userContentController.addUserScript(
+            WKUserScript(
+                source: Self.textToDiagramCloseButtonScript,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: true
+            )
+        )
         
         do {
             let consoleHandlerScript = try WKUserScript(
@@ -225,6 +232,180 @@ class ExcalidrawCore: NSObject, ObservableObject {
                 break
         }
     }
+}
+
+extension ExcalidrawCore {
+    /// Adds a fallback close button for Excalidraw's Text-to-Diagram dialog.
+    /// Upstream only renders the close icon in phone/fullscreen mode.
+    static let textToDiagramCloseButtonScript = #"""
+(() => {
+  if (window.__excalidrawZTTDCloseButtonInstalled) {
+    return;
+  }
+  window.__excalidrawZTTDCloseButtonInstalled = true;
+
+  const buttonId = "excalidrawz-ttd-close-button";
+
+  const isElementVisible = (element) => {
+    if (!element) {
+      return false;
+    }
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+  };
+
+  const findTTDDialog = () => {
+    return document.querySelector(".Dialog.ttd-dialog");
+  };
+
+  const isTTDDialogOpen = () => {
+    const dialog = findTTDDialog();
+    if (!dialog) {
+      return false;
+    }
+    const modal = dialog.closest(".Modal");
+    return isElementVisible(dialog) && (!modal || isElementVisible(modal));
+  };
+
+  const dispatchEscape = (target) => {
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      keyCode: 27,
+      which: 27,
+      bubbles: true,
+      cancelable: true
+    });
+    target.dispatchEvent(event);
+  };
+
+  const requestClose = () => {
+    const dialog = findTTDDialog();
+    if (!dialog) {
+      return;
+    }
+    const modal = dialog.closest(".Modal");
+    const background = modal ? modal.querySelector(".Modal__background") : null;
+    if (background) {
+      background.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: window
+      }));
+      return;
+    }
+    dispatchEscape(modal || dialog);
+    dispatchEscape(document);
+  };
+
+  const ensureButton = () => {
+    const dialog = findTTDDialog();
+
+    if (!document.body || !dialog) {
+      const existing = document.getElementById(buttonId);
+      if (existing) {
+        existing.style.display = "none";
+      }
+      return;
+    }
+
+    let button = document.getElementById(buttonId);
+    if (!button) {
+      button = document.createElement("button");
+      button.id = buttonId;
+      button.type = "button";
+      button.textContent = "×";
+      button.setAttribute("aria-label", "Close text-to-diagram dialog");
+      button.title = "Close";
+
+      button.style.position = "absolute";
+      button.style.top = "10px";
+      button.style.right = "12px";
+      button.style.zIndex = "20";
+      button.style.display = "none";
+      button.style.width = "28px";
+      button.style.height = "28px";
+      button.style.border = "none";
+      button.style.borderRadius = "999px";
+      button.style.background = "transparent";
+      button.style.color = "var(--color-text-primary, #1f1f1f)";
+      button.style.font = "400 24px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      button.style.padding = "0";
+      button.style.cursor = "pointer";
+      button.style.opacity = "0.72";
+
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        requestClose();
+      });
+
+      button.addEventListener("mouseenter", () => {
+        button.style.opacity = "1";
+        button.style.background = "rgba(0, 0, 0, 0.06)";
+      });
+      button.addEventListener("mouseleave", () => {
+        button.style.opacity = "0.72";
+        button.style.background = "transparent";
+      });
+    }
+
+    if (dialog.style.position !== "relative" && dialog.style.position !== "absolute") {
+      dialog.style.position = "relative";
+    }
+    if (button.parentElement !== dialog) {
+      dialog.appendChild(button);
+    }
+
+    button.style.display = isTTDDialogOpen() ? "inline-flex" : "none";
+  };
+
+  const scheduleEnsure = (() => {
+    let rafId = null;
+    return () => {
+      if (rafId !== null) {
+        return;
+      }
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        try {
+          ensureButton();
+        } catch (_) {}
+      });
+    };
+  })();
+
+  const start = () => {
+    ensureButton();
+    if (!document.body) {
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      scheduleEnsure();
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "style", "aria-hidden"]
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        window.setTimeout(scheduleEnsure, 0);
+      }
+    }, true);
+    window.addEventListener("resize", scheduleEnsure);
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
+"""#
 }
 
 /// Keep stateless
@@ -702,4 +883,3 @@ window.excalidrawZHelper.exportElementsToBlob(
         try await webView.evaluateJavaScript("document.body.style = '\(enabled ? "" : "pointer-events: none;")'; 0;")
     }
 }
-

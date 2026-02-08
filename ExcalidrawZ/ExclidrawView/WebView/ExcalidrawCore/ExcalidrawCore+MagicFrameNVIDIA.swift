@@ -430,20 +430,19 @@ Wireframe text extracted from frame elements:
         let promptLength = requestPayload.prompt?.count ?? 0
         let messagesCount = requestPayload.messages?.count ?? 0
         logger.info("Parsed text-to-diagram payload: promptChars=\(promptLength) messages=\(messagesCount)")
+        let promptPreview = requestPayload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !promptPreview.isEmpty {
+            logger.info("Text-to-diagram prompt preview: \(Self.truncatedForLog(promptPreview, limit: 240))")
+        } else if let firstUserMessage = requestPayload.messages?.first(where: { ($0["role"] ?? "").lowercased() == "user" })?["content"],
+                  !firstUserMessage.isEmpty {
+            logger.info("Text-to-diagram first user message preview: \(Self.truncatedForLog(firstUserMessage, limit: 240))")
+        }
         
         // Build messages for NVIDIA API
         var nvidiaMessages: [[String: Any]] = [
             [
                 "role": "system",
-                "content": """
-                You are a diagram expert that generates Mermaid diagram syntax from text descriptions.
-                
-                Rules:
-                - Return ONLY valid Mermaid diagram code. No explanations, no markdown code fences.
-                - Use flowchart (graph TD/LR), sequence, class, state, er, or gantt diagrams as appropriate.
-                - Keep node labels concise and clear.
-                - Use proper Mermaid syntax with correct indentation.
-                """
+                "content": Self.textToDiagramMasterPrompt
             ]
         ]
         
@@ -470,7 +469,7 @@ Wireframe text extracted from frame elements:
         
         let requestBodyDict: [String: Any] = [
             "model": Secrets.shared.nvidiaModel,
-            "temperature": 0.2,
+            "temperature": 0.0,
             "messages": nvidiaMessages
         ]
         
@@ -503,6 +502,7 @@ Wireframe text extracted from frame elements:
         guard !mermaid.isEmpty else {
             throw NvidiaMagicFrameError.emptyResponse
         }
+        logger.info("NVIDIA Text-to-Diagram Mermaid preview: \(Self.truncatedForLog(mermaid, limit: 400))")
         logger.info("NVIDIA Text-to-Diagram generation succeeded. Mermaid length: \(mermaid.count)")
         return mermaid
     }
@@ -528,6 +528,56 @@ Wireframe text extracted from frame elements:
         
         return trimmed
     }
+
+    /// Master prompt for text-to-diagram quality.
+    /// Preferences:
+    /// - Default flowchart LR
+    /// - Concise output
+    /// - Supports both architecture and workflow inputs
+    /// - Cap complexity to ~15 nodes
+    /// - Make educated guesses when input is ambiguous
+    fileprivate static let textToDiagramMasterPrompt = """
+You are a Mermaid diagram generator for Excalidraw.
+
+Task:
+- Convert the user request into ONE valid Mermaid diagram.
+- Primary target: software architecture and workflow/process descriptions.
+- Obey explicit spatial/layout instructions from the user.
+
+Output rules (strict):
+- Return Mermaid code only.
+- No markdown fences.
+- No explanations.
+- Prefer `flowchart LR` by default.
+- If user gives position constraints such as "same line/row", "below/under", "above/top", choose orientation and links to satisfy those constraints even if that means not using LR.
+- Use concise, clear labels.
+- Keep diagrams compact and readable.
+- Keep total nodes at or below 15.
+- Keep node labels short (prefer 1-4 words).
+- Avoid decorative containers or headings (e.g., don't add "Top" boxes) unless user explicitly asks for grouping.
+
+Diagram type selection:
+- Prefer flowchart unless the user explicitly requests another Mermaid diagram type.
+- Use `sequenceDiagram` only when user explicitly asks for sequence/timeline style.
+- Use `erDiagram` only when user explicitly asks for entities/relations.
+- Use `stateDiagram-v2` only when user explicitly asks for states/transitions.
+- Use `classDiagram` only when user explicitly asks for classes/OO structure.
+- Use `gantt` only when user explicitly asks for schedules/timelines.
+
+Flowchart layout rules:
+- If user asks "A and B in the same line/row", place them horizontally adjacent (for example, `A --- B` with a top-down flow when needed).
+- If user asks "C under/below A/B", place C in a lower rank (prefer `flowchart TB` when vertical layering is required).
+- If user asks both horizontal and vertical constraints, prioritize satisfying relative positions over default direction.
+- Minimize crossed edges; reorder nodes and choose simple links to keep the diagram readable.
+- Use edge labels only when they add meaning; keep each edge label to 1-3 words.
+- Do not invent extra edges or components not requested. If relation is ambiguous, choose the simplest plausible flow.
+
+Quality requirements:
+- Valid Mermaid syntax.
+- No orphan references.
+- Parse-safe identifiers.
+- If input is underspecified, make an educated but minimal guess instead of asking follow-up questions.
+"""
     
     /// Build an SSE-formatted response body that Excalidraw's TTDStreamFetch expects.
     /// Excalidraw reads chunks from `data:` lines and accumulates text.
